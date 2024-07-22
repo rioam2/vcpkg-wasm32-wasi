@@ -1,3 +1,8 @@
+set(WASI_PATCH "")
+if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32")
+    set(WASI_PATCH "wasi-support.patch")
+endif()
+
 if(VCPKG_TARGET_IS_WINDOWS)
     vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 endif()
@@ -10,6 +15,7 @@ vcpkg_from_github(
     HEAD_REF devel
     PATCHES
         fix-install-path.patch
+        ${WASI_PATCH}
 )
 
 vcpkg_cmake_configure(

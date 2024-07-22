@@ -1,0 +1,91 @@
+From 7b4e0c440d08c631992307d94b6a87f0910e20b8 Mon Sep 17 00:00:00 2001
+From: Rio Martinez <rio@riomartinez.com>
+Date: Mon, 22 Jul 2024 16:40:28 +0200
+Subject: [PATCH] chore(catch2): remove references to unimplemented signals
+
+---
+ .../catch_fatal_condition_handler.cpp         | 47 ++++++++++---------
+ 1 file changed, 24 insertions(+), 23 deletions(-)
+
+diff --git a/src/catch2/internal/catch_fatal_condition_handler.cpp b/src/catch2/internal/catch_fatal_condition_handler.cpp
+index 9ef5b217..df42b2a3 100644
+--- a/src/catch2/internal/catch_fatal_condition_handler.cpp
++++ b/src/catch2/internal/catch_fatal_condition_handler.cpp
+@@ -169,19 +169,20 @@ namespace Catch {
+ 
+     static char* altStackMem = nullptr;
+     static std::size_t altStackSize = 0;
+-    static stack_t oldSigStack{};
+-    static struct sigaction oldSigActions[sizeof(signalDefs) / sizeof(SignalDefs)]{};
++    // static stack_t oldSigStack{};
++    // static struct sigaction oldSigActions[sizeof(signalDefs) / sizeof(SignalDefs)]{};
+ 
+     static void restorePreviousSignalHandlers() noexcept {
+         // We set signal handlers back to the previous ones. Hopefully
+         // nobody overwrote them in the meantime, and doesn't expect
+         // their signal handlers to live past ours given that they
+         // installed them after ours..
+-        for (std::size_t i = 0; i < sizeof(signalDefs) / sizeof(SignalDefs); ++i) {
+-            sigaction(signalDefs[i].id, &oldSigActions[i], nullptr);
+-        }
++        assert(false);
++        // for (std::size_t i = 0; i < sizeof(signalDefs) / sizeof(SignalDefs); ++i) {
++        //     sigaction(signalDefs[i].id, &oldSigActions[i], nullptr);
++        // }
+         // Return the old stack
+-        sigaltstack(&oldSigStack, nullptr);
++        // sigaltstack(&oldSigStack, nullptr);
+     }
+ 
+     static void handleSignal( int sig ) {
+@@ -201,11 +202,11 @@ namespace Catch {
+     }
+ 
+     FatalConditionHandler::FatalConditionHandler() {
+-        assert(!altStackMem && "Cannot initialize POSIX signal handler when one already exists");
+-        if (altStackSize == 0) {
+-            altStackSize = std::max(static_cast<size_t>(SIGSTKSZ), minStackSizeForErrors);
+-        }
+-        altStackMem = new char[altStackSize]();
++        // assert(!altStackMem && "Cannot initialize POSIX signal handler when one already exists");
++        // if (altStackSize == 0) {
++        //     altStackSize = std::max(static_cast<size_t>(SIGSTKSZ), minStackSizeForErrors);
++        // }
++        // altStackMem = new char[altStackSize]();
+     }
+ 
+     FatalConditionHandler::~FatalConditionHandler() {
+@@ -216,18 +217,18 @@ namespace Catch {
+     }
+ 
+     void FatalConditionHandler::engage_platform() {
+-        stack_t sigStack;
+-        sigStack.ss_sp = altStackMem;
+-        sigStack.ss_size = altStackSize;
+-        sigStack.ss_flags = 0;
+-        sigaltstack(&sigStack, &oldSigStack);
+-        struct sigaction sa = { };
+-
+-        sa.sa_handler = handleSignal;
+-        sa.sa_flags = SA_ONSTACK;
+-        for (std::size_t i = 0; i < sizeof(signalDefs)/sizeof(SignalDefs); ++i) {
+-            sigaction(signalDefs[i].id, &sa, &oldSigActions[i]);
+-        }
++        // stack_t sigStack;
++        // sigStack.ss_sp = altStackMem;
++        // sigStack.ss_size = altStackSize;
++        // sigStack.ss_flags = 0;
++        // // sigaltstack(&sigStack, &oldSigStack);
++        // struct sigaction sa = { };
++
++        // sa.sa_handler = handleSignal;
++        // sa.sa_flags = SA_ONSTACK;
++        // for (std::size_t i = 0; i < sizeof(signalDefs)/sizeof(SignalDefs); ++i) {
++        //     sigaction(signalDefs[i].id, &sa, &oldSigActions[i]);
++        // }
+     }
+ 
+ #if defined(__GNUC__)
+-- 
+2.39.3 (Apple Git-146)
+
