@@ -1,3 +1,8 @@
+set(WASI_PATCH "")
+if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32")
+    set(WASI_PATCH "wasi-support.patch")
+endif()
+
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO fmtlib/fmt
@@ -7,6 +12,7 @@ vcpkg_from_github(
     PATCHES
         fix-visibility.patch
         fix-write-batch.patch
+        ${WASI_PATCH}
 )
 
 vcpkg_cmake_configure(

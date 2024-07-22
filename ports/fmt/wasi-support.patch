@@ -1,0 +1,61 @@
+From e5ea4ba8313bd81760732ea4f892d183bc68b8da Mon Sep 17 00:00:00 2001
+From: Rio Martinez <rio@riomartinez.com>
+Date: Mon, 22 Jul 2024 14:39:34 +0200
+Subject: [PATCH] fix(fmt): fail calls to unimplmented dup on wasm32-wasi
+
+dup is not implemented in WASI, therefore, all calls using it should fail.
+Reference: https://github.com/WebAssembly/wasi-libc/blob/b9e15a8af930603183eb13af62e193de0f9f9ee3/libc-top-half/musl/include/unistd.h#L54
+---
+ src/os.cc | 12 +++++-------
+ 1 file changed, 5 insertions(+), 7 deletions(-)
+
+diff --git a/src/os.cc b/src/os.cc
+index 27366499..4558b5d9 100644
+--- a/src/os.cc
++++ b/src/os.cc
+@@ -285,7 +285,7 @@ std::size_t file::write(const void* buffer, std::size_t count) {
+ file file::dup(int fd) {
+   // Don't retry as dup doesn't return EINTR.
+   // http://pubs.opengroup.org/onlinepubs/009695399/functions/dup.html
+-  int new_fd = FMT_POSIX_CALL(dup(fd));
++  int new_fd = -1;
+   if (new_fd == -1)
+     FMT_THROW(system_error(
+         errno, FMT_STRING("cannot duplicate file descriptor {}"), fd));
+@@ -293,8 +293,7 @@ file file::dup(int fd) {
+ }
+ 
+ void file::dup2(int fd) {
+-  int result = 0;
+-  FMT_RETRY(result, FMT_POSIX_CALL(dup2(fd_, fd)));
++  int result = -1;
+   if (result == -1) {
+     FMT_THROW(system_error(
+         errno, FMT_STRING("cannot duplicate file descriptor {} to {}"), fd_,
+@@ -303,8 +302,7 @@ void file::dup2(int fd) {
+ }
+ 
+ void file::dup2(int fd, std::error_code& ec) noexcept {
+-  int result = 0;
+-  FMT_RETRY(result, FMT_POSIX_CALL(dup2(fd_, fd)));
++  int result = -1;
+   if (result == -1) ec = std::error_code(errno, std::generic_category());
+ }
+ 
+@@ -341,11 +339,11 @@ pipe::pipe() {
+ #  ifdef _WIN32
+   // Make the default pipe capacity same as on Linux 2.6.11+.
+   enum { DEFAULT_CAPACITY = 65536 };
+-  int result = FMT_POSIX_CALL(pipe(fds, DEFAULT_CAPACITY, _O_BINARY));
++  int result = -1;
+ #  else
+   // Don't retry as the pipe function doesn't return EINTR.
+   // http://pubs.opengroup.org/onlinepubs/009696799/functions/pipe.html
+-  int result = FMT_POSIX_CALL(pipe(fds));
++  int result = -1;
+ #  endif
+   if (result != 0)
+     FMT_THROW(system_error(errno, FMT_STRING("cannot create pipe")));
+-- 
+2.39.3 (Apple Git-146)
+
