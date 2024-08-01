@@ -1,16 +1,17 @@
 {
   "name": "qtbase",
-  "version": "6.7.2",
-  "description": "Qt Base (Core, Gui, Widgets, Network, ...)",
+  "version": "6.6.1",
+  "port-version": 13,
+  "description": "Qt Application Framework Base Module. Includes Core, GUI, Widgets, Networking, SQL, Concurrent and other essential qt components.",
   "homepage": "https://www.qt.io/",
   "license": null,
   "supports": "!uwp",
+  "builtin-baseline": "fba75d09065fcc76a25dcf386b1d00d33f5175af",
   "dependencies": [
-    {
-      "name": "libb2",
-      "platform": "!windows"
+    { 
+      "name": "pcre2", 
+      "platform": "!wasm32"
     },
-    "pcre2",
     {
       "name": "qtbase",
       "host": true,
@@ -22,14 +23,6 @@
       "features": [
         "doubleconversion"
       ]
-    },
-    {
-      "name": "qtbase",
-      "default-features": false,
-      "features": [
-        "cups"
-      ],
-      "platform": "osx"
     },
     {
       "name": "qtbase",
@@ -60,10 +53,7 @@
   "default-features": [
     "brotli",
     "concurrent",
-    {
-      "name": "dbus",
-      "platform": "!(static & windows)"
-    },
+    "dbus",
     "default-features",
     "doubleconversion",
     "freetype",
@@ -101,7 +91,10 @@
     "brotli": {
       "description": "Support for downloading and decompressing resources compressed with Brotli through QNetworkAccessManager.",
       "dependencies": [
-        "brotli",
+        {
+          "name": "brotli",
+          "platform": "!wasm32"
+        },
         {
           "name": "qtbase",
           "default-features": false,
@@ -123,25 +116,9 @@
         }
       ]
     },
-    "cups": {
-      "description": "Provides support for the Common Unix Printing System.",
-      "supports": "linux | osx"
-    },
     "dbus": {
       "description": "Qt D-Bus",
       "dependencies": [
-        {
-          "name": "dbus",
-          "default-features": false
-        },
-        {
-          "name": "qtbase",
-          "host": true,
-          "default-features": false,
-          "features": [
-            "dbus"
-          ]
-        },
         {
           "name": "qtbase",
           "default-features": false,
@@ -220,6 +197,7 @@
       "dependencies": [
         {
           "name": "freetype",
+          "platform": "!wasm32",
           "default-features": false
         }
       ]
@@ -366,13 +344,19 @@
     "pcre2": {
       "description": "Enable PCRE2 support",
       "dependencies": [
-        "pcre2"
+        {
+          "name": "pcre2",
+          "platform": "!wasm32"
+        }
       ]
     },
     "png": {
       "description": "Enable PNG",
       "dependencies": [
-        "libpng",
+        {
+          "name": "libpng",
+          "platform": "!wasm32"
+        },
         {
           "name": "qtbase",
           "default-features": false,
@@ -549,5 +533,27 @@
         "zstd"
       ]
     }
-  }
+  },
+  "overrides": [
+    {
+      "name": "brotli",
+      "version": "1.1.0"
+    },
+    {
+      "name": "bzip2",
+      "version": "1.0.8"
+    },
+    {
+      "name": "freetype",
+      "version": "2.13.2"
+    },
+    {
+      "name": "libpng",
+      "version": "1.6.43"
+    },
+    {
+      "name": "pcre2",
+      "version": "10.42"
+    }
+  ]
 }

@@ -1,0 +1,3591 @@
+From 47b4dbeaa2676e8dff16384baebb53904fe81897 Mon Sep 17 00:00:00 2001
+From: Rio Martinez <rio@riomartinez.com>
+Date: Tue, 9 Jul 2024 16:25:57 +0200
+Subject: [PATCH] chore: add rudimentary wasi support
+
+This PR adds rudimentary WebAssembly/WASI support
+by excluding unsupported calls to non-implemented
+WASI/posix syscalls such as setjmp. All
+modifications are behind preprocessor directives
+to ensure that no other targets are affected by
+the patches.
+
+In the future, use of CMake to swap out the needed
+source files is a preferred option. For now, this
+patch provides the needed functionality while
+being as non-destructive as possible.
+---
+ .../painting/painterpaths/CMakeLists.txt      |  2 +-
+ mkspecs/linux-clang/qplatformdefs.h           |  8 ++
+ src/3rdparty/freetype/CMakeLists.txt          |  2 +-
+ .../include/freetype/config/ftstdlib.h        |  3 +-
+ .../freetype/include/freetype/freetype.h      | 92 +++++++++++++++++++
+ .../freetype/include/freetype/ftadvanc.h      |  8 ++
+ .../freetype/include/freetype/ftbbox.h        |  4 +
+ .../freetype/include/freetype/ftbdf.h         |  8 ++
+ .../freetype/include/freetype/ftbitmap.h      | 24 +++++
+ .../freetype/include/freetype/ftbzip2.h       |  4 +
+ .../freetype/include/freetype/ftcache.h       | 40 ++++++++
+ .../freetype/include/freetype/ftcid.h         | 12 +++
+ .../freetype/include/freetype/ftcolor.h       | 12 +++
+ .../freetype/include/freetype/ftglyph.h       | 24 +++++
+ .../freetype/include/freetype/ftgxval.h       |  8 ++
+ .../freetype/include/freetype/ftgzip.h        |  8 ++
+ .../freetype/include/freetype/ftlcdfil.h      | 12 +++
+ .../freetype/include/freetype/ftlist.h        |  4 +
+ .../freetype/include/freetype/ftlzw.h         |  4 +
+ .../freetype/include/freetype/ftmac.h         | 24 +++++
+ src/3rdparty/freetype/include/freetype/ftmm.h | 60 ++++++++++++
+ .../freetype/include/freetype/ftmodapi.h      | 28 ++++++
+ .../freetype/include/freetype/ftotval.h       |  4 +
+ .../freetype/include/freetype/ftoutln.h       | 36 ++++++++
+ .../freetype/include/freetype/ftpfr.h         | 12 +++
+ .../freetype/include/freetype/ftrender.h      |  4 +
+ .../freetype/include/freetype/ftsizes.h       | 12 +++
+ .../freetype/include/freetype/ftsnames.h      |  8 ++
+ .../freetype/include/freetype/ftstroke.h      | 44 +++++++++
+ .../freetype/include/freetype/ftwinfnt.h      |  4 +
+ .../include/freetype/internal/ftvalid.h       | 15 ++-
+ .../freetype/internal/services/svgxval.h      |  2 +
+ .../freetype/include/freetype/t1tables.h      |  8 ++
+ .../freetype/include/freetype/tttables.h      |  8 ++
+ src/3rdparty/freetype/src/base/ftglyph.c      |  4 +
+ src/3rdparty/freetype/src/base/ftgxval.c      |  4 +
+ src/3rdparty/freetype/src/base/ftobjs.c       |  3 +-
+ src/3rdparty/freetype/src/sfnt/pngshim.c      |  2 +
+ src/3rdparty/freetype/src/sfnt/ttcmap.c       | 29 +++++-
+ src/3rdparty/freetype/src/sfnt/ttcmap.h       | 42 ++++++++-
+ src/3rdparty/freetype/src/smooth/ftgrays.c    |  8 ++
+ src/3rdparty/freetype/src/truetype/ttinterp.h |  4 +
+ src/3rdparty/harfbuzz-ng/CMakeLists.txt       |  2 +-
+ src/3rdparty/libpng/pngconf.h                 |  7 ++
+ src/corelib/CMakeLists.txt                    | 34 +++----
+ src/corelib/global/qlogging.cpp               |  4 +
+ src/corelib/global/qsystemdetection.h         |  3 +
+ src/corelib/global/qtenvironmentvariables.cpp |  8 ++
+ src/corelib/io/qfilesystemengine_unix.cpp     | 45 +++++++--
+ src/corelib/io/qlockfile_unix.cpp             |  4 +-
+ src/corelib/io/qstandardpaths_unix.cpp        |  9 ++
+ src/corelib/io/qstorageinfo_unix.cpp          | 48 +++++++++-
+ src/corelib/io/qtemporaryfile.cpp             |  4 +
+ src/corelib/kernel/qcore_unix_p.h             | 54 +++++++++++
+ src/corelib/kernel/qcoreapplication.cpp       |  2 +-
+ src/corelib/kernel/qeventdispatcher_unix.cpp  |  4 +
+ src/corelib/kernel/qeventdispatcher_unix_p.h  |  2 +
+ src/corelib/text/qregularexpression.cpp       |  4 +
+ src/corelib/thread/qthread_unix.cpp           |  2 +-
+ src/gui/CMakeLists.txt                        | 28 +++---
+ src/gui/image/qpnghandler.cpp                 |  8 ++
+ src/gui/kernel/qguiapplication.cpp            |  4 +
+ src/gui/painting/qgrayraster.c                | 14 +++
+ src/network/CMakeLists.txt                    | 12 +--
+ .../platforminputcontexts/CMakeLists.txt      |  2 +-
+ src/plugins/platformthemes/CMakeLists.txt     |  2 +-
+ src/plugins/printsupport/CMakeLists.txt       |  2 +-
+ src/plugins/sqldrivers/odbc/CMakeLists.txt    |  2 +-
+ src/plugins/sqldrivers/sqlite/CMakeLists.txt  |  2 +-
+ src/printsupport/CMakeLists.txt               |  6 +-
+ src/tools/bootstrap/CMakeLists.txt            |  4 +-
+ tests/auto/cmake/CMakeLists.txt               |  2 +-
+ 72 files changed, 896 insertions(+), 72 deletions(-)
+
+diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
+index 0a701d82ab..fc4f7365a8 100644
+--- a/examples/widgets/painting/painterpaths/CMakeLists.txt
++++ b/examples/widgets/painting/painterpaths/CMakeLists.txt
+@@ -31,7 +31,7 @@ target_link_libraries(painterpaths PRIVATE
+     Qt6::Widgets
+ )
+ 
+-if(UNIX AND NOT APPLE AND NOT HAIKU AND NOT INTEGRITY AND NOT VXWORKS)
++if((UNIX OR WASI) AND NOT APPLE AND NOT HAIKU AND NOT INTEGRITY AND NOT VXWORKS)
+     target_link_libraries(painterpaths PRIVATE
+         m
+     )
+diff --git a/mkspecs/linux-clang/qplatformdefs.h b/mkspecs/linux-clang/qplatformdefs.h
+index fe03beefd1..04f064d96b 100644
+--- a/mkspecs/linux-clang/qplatformdefs.h
++++ b/mkspecs/linux-clang/qplatformdefs.h
+@@ -25,19 +25,27 @@
+ #include <pthread.h>
+ #include <dirent.h>
+ #include <fcntl.h>
++#if !defined(Q_OS_WASI)
+ #include <grp.h>
+ #include <pwd.h>
++#endif
+ #include <signal.h>
+ #include <dlfcn.h>
+ 
+ #include <sys/types.h>
+ #include <sys/ioctl.h>
++#if !defined(Q_OS_WASI)
+ #include <sys/ipc.h>
++#endif
+ #include <sys/time.h>
++#if !defined(Q_OS_WASI)
+ #include <sys/shm.h>
++#endif
+ #include <sys/socket.h>
+ #include <sys/stat.h>
++#if !defined(Q_OS_WASI)
+ #include <sys/wait.h>
++#endif
+ #include <netinet/in.h>
+ 
+ #define QT_USE_XOPEN_LFS_EXTENSIONS
+diff --git a/src/3rdparty/freetype/CMakeLists.txt b/src/3rdparty/freetype/CMakeLists.txt
+index 720a98bee1..7b161e0df2 100644
+--- a/src/3rdparty/freetype/CMakeLists.txt
++++ b/src/3rdparty/freetype/CMakeLists.txt
+@@ -85,7 +85,7 @@ qt_internal_extend_target(BundledFreetype CONDITION WIN32
+         src/base/ftsystem.c
+ )
+ 
+-qt_internal_extend_target(BundledFreetype CONDITION UNIX
++qt_internal_extend_target(BundledFreetype CONDITION (UNIX OR WASI)
+     SOURCES
+         builds/unix/ftsystem.c
+     INCLUDE_DIRECTORIES
+diff --git a/src/3rdparty/freetype/include/freetype/config/ftstdlib.h b/src/3rdparty/freetype/include/freetype/config/ftstdlib.h
+index f65148a902..11ba4f1e3c 100644
+--- a/src/3rdparty/freetype/include/freetype/config/ftstdlib.h
++++ b/src/3rdparty/freetype/include/freetype/config/ftstdlib.h
+@@ -162,8 +162,9 @@
+    *
+    */
+ 
+-
++#if !defined(__wasi__)
+ #include <setjmp.h>
++#endif
+ 
+ #define ft_jmp_buf     jmp_buf  /* note: this cannot be a typedef since  */
+                                 /*       `jmp_buf` is defined as a macro */
+diff --git a/src/3rdparty/freetype/include/freetype/freetype.h b/src/3rdparty/freetype/include/freetype/freetype.h
+index 92acf3794a..698c461937 100644
+--- a/src/3rdparty/freetype/include/freetype/freetype.h
++++ b/src/3rdparty/freetype/include/freetype/freetype.h
+@@ -2343,7 +2343,11 @@ FT_BEGIN_HEADER
+    *   variable to control driver properties.  See section @properties for
+    *   more.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Init_FreeType( FT_Library  *alibrary );
+ 
+ 
+@@ -2363,7 +2367,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Done_FreeType( FT_Library  library );
+ 
+ 
+@@ -2566,7 +2574,11 @@ FT_BEGIN_HEADER
+    *   Use @FT_Done_Face to destroy the created @FT_Face object (along with
+    *   its slot and sizes).
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Face( FT_Library   library,
+                const char*  filepathname,
+                FT_Long      face_index,
+@@ -2606,7 +2618,11 @@ FT_BEGIN_HEADER
+    * @note:
+    *   You must not deallocate the memory before calling @FT_Done_Face.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Memory_Face( FT_Library      library,
+                       const FT_Byte*  file_base,
+                       FT_Long         file_size,
+@@ -2755,7 +2771,11 @@ FT_BEGIN_HEADER
+    *     } while ( face_idx < num_faces )
+    *   ```
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Open_Face( FT_Library           library,
+                 const FT_Open_Args*  args,
+                 FT_Long              face_index,
+@@ -2781,7 +2801,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Attach_File( FT_Face      face,
+                   const char*  filepathname );
+ 
+@@ -2817,7 +2841,11 @@ FT_BEGIN_HEADER
+    *   invoking this function.  Most drivers simply do not implement file or
+    *   stream attachments.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Attach_Stream( FT_Face              face,
+                     const FT_Open_Args*  parameters );
+ 
+@@ -2847,7 +2875,11 @@ FT_BEGIN_HEADER
+    *   2.4.2
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Reference_Face( FT_Face  face );
+ 
+ 
+@@ -2871,7 +2903,11 @@ FT_BEGIN_HEADER
+    *   See the discussion of reference counters in the description of
+    *   @FT_Reference_Face.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Done_Face( FT_Face  face );
+ 
+ 
+@@ -2918,7 +2954,11 @@ FT_BEGIN_HEADER
+    *
+    *   Don't use this function if you are using the FreeType cache API.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Select_Size( FT_Face  face,
+                   FT_Int   strike_index );
+ 
+@@ -3082,7 +3122,11 @@ FT_BEGIN_HEADER
+    *
+    *   Don't use this function if you are using the FreeType cache API.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Request_Size( FT_Face          face,
+                    FT_Size_Request  req );
+ 
+@@ -3131,7 +3175,11 @@ FT_BEGIN_HEADER
+    *
+    *   Don't use this function if you are using the FreeType cache API.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_Char_Size( FT_Face     face,
+                     FT_F26Dot6  char_width,
+                     FT_F26Dot6  char_height,
+@@ -3168,7 +3216,11 @@ FT_BEGIN_HEADER
+    *
+    *   Don't use this function if you are using the FreeType cache API.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_Pixel_Sizes( FT_Face  face,
+                       FT_UInt  pixel_width,
+                       FT_UInt  pixel_height );
+@@ -3223,7 +3275,11 @@ FT_BEGIN_HEADER
+    *   at EM size, then scale it manually and fill it as a graphics
+    *   operation.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Load_Glyph( FT_Face   face,
+                  FT_UInt   glyph_index,
+                  FT_Int32  load_flags );
+@@ -3273,7 +3329,11 @@ FT_BEGIN_HEADER
+    *   to @FT_Get_Char_Index is omitted, and the function behaves identically
+    *   to @FT_Load_Glyph.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Load_Char( FT_Face   face,
+                 FT_ULong  char_code,
+                 FT_Int32  load_flags );
+@@ -3972,7 +4032,11 @@ FT_BEGIN_HEADER
+    *   3~times per pixel: red foreground subpixel to red background subpixel
+    *   and so on for green and blue.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Render_Glyph( FT_GlyphSlot    slot,
+                    FT_Render_Mode  render_mode );
+ 
+@@ -4062,7 +4126,11 @@ FT_BEGIN_HEADER
+    *   supported; use @FT_HAS_KERNING to find out whether a font has data
+    *   that can be extracted with `FT_Get_Kerning`.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Kerning( FT_Face     face,
+                   FT_UInt     left_glyph,
+                   FT_UInt     right_glyph,
+@@ -4106,7 +4174,11 @@ FT_BEGIN_HEADER
+    *   Only very few AFM files come with track kerning data; please refer to
+    *   Adobe's AFM specification for more details.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Track_Kerning( FT_Face    face,
+                         FT_Fixed   point_size,
+                         FT_Int     degree,
+@@ -4150,7 +4222,11 @@ FT_BEGIN_HEADER
+    *   preferred to a UCS-2 cmap).  It is thus preferable to @FT_Set_Charmap
+    *   in this case.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Select_Charmap( FT_Face      face,
+                      FT_Encoding  encoding );
+ 
+@@ -4181,7 +4257,11 @@ FT_BEGIN_HEADER
+    *   It also fails if an OpenType type~14 charmap is selected (which
+    *   doesn't map character codes to glyph indices at all).
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_Charmap( FT_Face     face,
+                   FT_CharMap  charmap );
+ 
+@@ -4435,7 +4515,11 @@ FT_BEGIN_HEADER
+    *   2.8
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Face_Properties( FT_Face        face,
+                       FT_UInt        num_properties,
+                       FT_Parameter*  properties );
+@@ -4524,7 +4608,11 @@ FT_BEGIN_HEADER
+    *   It then works only for fonts that actually embed glyph names (which
+    *   many recent OpenType fonts do not).
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Glyph_Name( FT_Face     face,
+                      FT_UInt     glyph_index,
+                      FT_Pointer  buffer,
+@@ -4644,7 +4732,11 @@ FT_BEGIN_HEADER
+    *     https://docs.microsoft.com/en-us/typography/opentype/spec/glyf#composite-glyph-description
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_SubGlyph_Info( FT_GlyphSlot  glyph,
+                         FT_UInt       sub_index,
+                         FT_Int       *p_index,
+diff --git a/src/3rdparty/freetype/include/freetype/ftadvanc.h b/src/3rdparty/freetype/include/freetype/ftadvanc.h
+index 4560ded6dc..0f183f03b0 100644
+--- a/src/3rdparty/freetype/include/freetype/ftadvanc.h
++++ b/src/3rdparty/freetype/include/freetype/ftadvanc.h
+@@ -117,7 +117,11 @@ FT_BEGIN_HEADER
+    *   A scaled advance is returned in 16.16 format but isn't transformed by
+    *   the affine transformation specified by @FT_Set_Transform.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Advance( FT_Face    face,
+                   FT_UInt    gindex,
+                   FT_Int32   load_flags,
+@@ -170,7 +174,11 @@ FT_BEGIN_HEADER
+    *   Scaled advances are returned in 16.16 format but aren't transformed by
+    *   the affine transformation specified by @FT_Set_Transform.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Advances( FT_Face    face,
+                    FT_UInt    start,
+                    FT_UInt    count,
+diff --git a/src/3rdparty/freetype/include/freetype/ftbbox.h b/src/3rdparty/freetype/include/freetype/ftbbox.h
+index fc21740fc2..6330b670d5 100644
+--- a/src/3rdparty/freetype/include/freetype/ftbbox.h
++++ b/src/3rdparty/freetype/include/freetype/ftbbox.h
+@@ -81,7 +81,11 @@ FT_BEGIN_HEADER
+    *   and scale the subglyphs), then extracting the BBox, which can be
+    *   eventually converted back to font units.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Get_BBox( FT_Outline*  outline,
+                        FT_BBox     *abbox );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftbdf.h b/src/3rdparty/freetype/include/freetype/ftbdf.h
+index e8ce643128..b7f0a930e5 100644
+--- a/src/3rdparty/freetype/include/freetype/ftbdf.h
++++ b/src/3rdparty/freetype/include/freetype/ftbdf.h
+@@ -153,7 +153,11 @@ FT_BEGIN_HEADER
+    * @note:
+    *   This function only works with BDF faces, returning an error otherwise.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_BDF_Charset_ID( FT_Face       face,
+                          const char*  *acharset_encoding,
+                          const char*  *acharset_registry );
+@@ -197,7 +201,11 @@ FT_BEGIN_HEADER
+    *   In case of error, `aproperty->type` is always set to
+    *   @BDF_PROPERTY_TYPE_NONE.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_BDF_Property( FT_Face           face,
+                        const char*       prop_name,
+                        BDF_PropertyRec  *aproperty );
+diff --git a/src/3rdparty/freetype/include/freetype/ftbitmap.h b/src/3rdparty/freetype/include/freetype/ftbitmap.h
+index eb6b4b1eeb..5f90e79f6e 100644
+--- a/src/3rdparty/freetype/include/freetype/ftbitmap.h
++++ b/src/3rdparty/freetype/include/freetype/ftbitmap.h
+@@ -108,7 +108,11 @@ FT_BEGIN_HEADER
+    *   `source->buffer` and `target->buffer` must neither be equal nor
+    *   overlap.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Bitmap_Copy( FT_Library        library,
+                   const FT_Bitmap  *source,
+                   FT_Bitmap        *target );
+@@ -153,7 +157,11 @@ FT_BEGIN_HEADER
+    *   Bitmaps in @FT_PIXEL_MODE_GRAY2 and @FT_PIXEL_MODE_GRAY@ format are
+    *   converted to @FT_PIXEL_MODE_GRAY format (i.e., 8bpp).
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Bitmap_Embolden( FT_Library  library,
+                       FT_Bitmap*  bitmap,
+                       FT_Pos      xStrength,
+@@ -200,7 +208,11 @@ FT_BEGIN_HEADER
+    *   `source->buffer` and `target->buffer` must neither be equal nor
+    *   overlap.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Bitmap_Convert( FT_Library        library,
+                      const FT_Bitmap  *source,
+                      FT_Bitmap        *target,
+@@ -260,7 +272,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Bitmap_Blend( FT_Library         library,
+                    const FT_Bitmap*   source,
+                    const FT_Vector    source_offset,
+@@ -287,7 +303,11 @@ FT_BEGIN_HEADER
+    * @note:
+    *   This function is to be used in combination with @FT_Bitmap_Embolden.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_GlyphSlot_Own_Bitmap( FT_GlyphSlot  slot );
+ 
+ 
+@@ -313,7 +333,11 @@ FT_BEGIN_HEADER
+    *   The `library` argument is taken to have access to FreeType's memory
+    *   handling functions.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Bitmap_Done( FT_Library  library,
+                   FT_Bitmap  *bitmap );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftbzip2.h b/src/3rdparty/freetype/include/freetype/ftbzip2.h
+index 7d29f4682c..936f237f4c 100644
+--- a/src/3rdparty/freetype/include/freetype/ftbzip2.h
++++ b/src/3rdparty/freetype/include/freetype/ftbzip2.h
+@@ -87,7 +87,11 @@ FT_BEGIN_HEADER
+    *   This function may return `FT_Err_Unimplemented_Feature` if your build
+    *   of FreeType was not compiled with bzip2 support.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stream_OpenBzip2( FT_Stream  stream,
+                        FT_Stream  source );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftcache.h b/src/3rdparty/freetype/include/freetype/ftcache.h
+index a2072e26b8..8a9544e079 100644
+--- a/src/3rdparty/freetype/include/freetype/ftcache.h
++++ b/src/3rdparty/freetype/include/freetype/ftcache.h
+@@ -310,7 +310,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_Manager_New( FT_Library          library,
+                    FT_UInt             max_faces,
+                    FT_UInt             max_sizes,
+@@ -396,7 +400,11 @@ FT_BEGIN_HEADER
+    *   been completely flushed, and still no memory was available for the
+    *   operation.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_Manager_LookupFace( FTC_Manager  manager,
+                           FTC_FaceID   face_id,
+                           FT_Face     *aface );
+@@ -500,7 +508,11 @@ FT_BEGIN_HEADER
+    *   been completely flushed, and still no memory is available for the
+    *   operation.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_Manager_LookupSize( FTC_Manager  manager,
+                           FTC_Scaler   scaler,
+                           FT_Size     *asize );
+@@ -597,7 +609,11 @@ FT_BEGIN_HEADER
+    *   manager.
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_CMapCache_New( FTC_Manager     manager,
+                      FTC_CMapCache  *acache );
+ 
+@@ -732,7 +748,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_ImageCache_New( FTC_Manager      manager,
+                       FTC_ImageCache  *acache );
+ 
+@@ -781,7 +801,11 @@ FT_BEGIN_HEADER
+    *   to one of the caching sub-system APIs.  Don't assume that it is
+    *   persistent!
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_ImageCache_Lookup( FTC_ImageCache  cache,
+                          FTC_ImageType   type,
+                          FT_UInt         gindex,
+@@ -840,7 +864,11 @@ FT_BEGIN_HEADER
+    *   Calls to @FT_Set_Char_Size and friends have no effect on cached
+    *   glyphs; you should always use the FreeType cache API instead.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_ImageCache_LookupScaler( FTC_ImageCache  cache,
+                                FTC_Scaler      scaler,
+                                FT_ULong        load_flags,
+@@ -954,7 +982,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_SBitCache_New( FTC_Manager     manager,
+                      FTC_SBitCache  *acache );
+ 
+@@ -1008,7 +1040,11 @@ FT_BEGIN_HEADER
+    *   one of the caching sub-system APIs.  Don't assume that it is
+    *   persistent!
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_SBitCache_Lookup( FTC_SBitCache    cache,
+                         FTC_ImageType    type,
+                         FT_UInt          gindex,
+@@ -1068,7 +1104,11 @@ FT_BEGIN_HEADER
+    *   one of the caching sub-system APIs.  Don't assume that it is
+    *   persistent!
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FTC_SBitCache_LookupScaler( FTC_SBitCache  cache,
+                               FTC_Scaler     scaler,
+                               FT_ULong       load_flags,
+diff --git a/src/3rdparty/freetype/include/freetype/ftcid.h b/src/3rdparty/freetype/include/freetype/ftcid.h
+index ef22939022..45f302b25b 100644
+--- a/src/3rdparty/freetype/include/freetype/ftcid.h
++++ b/src/3rdparty/freetype/include/freetype/ftcid.h
+@@ -82,7 +82,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *    2.3.6
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_CID_Registry_Ordering_Supplement( FT_Face       face,
+                                            const char*  *registry,
+                                            const char*  *ordering,
+@@ -117,7 +121,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *    2.3.9
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_CID_Is_Internally_CID_Keyed( FT_Face   face,
+                                       FT_Bool  *is_cid );
+ 
+@@ -151,7 +159,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *    2.3.9
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_CID_From_Glyph_Index( FT_Face   face,
+                                FT_UInt   glyph_index,
+                                FT_UInt  *cid );
+diff --git a/src/3rdparty/freetype/include/freetype/ftcolor.h b/src/3rdparty/freetype/include/freetype/ftcolor.h
+index eae200fdf1..0b25eeddd2 100644
+--- a/src/3rdparty/freetype/include/freetype/ftcolor.h
++++ b/src/3rdparty/freetype/include/freetype/ftcolor.h
+@@ -207,7 +207,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Palette_Data_Get( FT_Face           face,
+                        FT_Palette_Data  *apalette );
+ 
+@@ -260,7 +264,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Palette_Select( FT_Face     face,
+                      FT_UShort   palette_index,
+                      FT_Color*  *apalette );
+@@ -298,7 +306,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Palette_Set_Foreground_Color( FT_Face   face,
+                                    FT_Color  foreground_color );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftglyph.h b/src/3rdparty/freetype/include/freetype/ftglyph.h
+index 4658895f7a..c4f2c35f83 100644
+--- a/src/3rdparty/freetype/include/freetype/ftglyph.h
++++ b/src/3rdparty/freetype/include/freetype/ftglyph.h
+@@ -334,7 +334,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Glyph( FT_Library       library,
+                 FT_Glyph_Format  format,
+                 FT_Glyph         *aglyph );
+@@ -365,7 +369,11 @@ FT_BEGIN_HEADER
+    *   fixed-point numbers, `slot->advance.x` and `slot->advance.y` (which
+    *   are in 26.6 fixed-point format) must be in the range ]-32768;32768[.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Glyph( FT_GlyphSlot  slot,
+                 FT_Glyph     *aglyph );
+ 
+@@ -390,7 +398,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Glyph_Copy( FT_Glyph   source,
+                  FT_Glyph  *target );
+ 
+@@ -422,7 +434,11 @@ FT_BEGIN_HEADER
+    *   The 2x2 transformation matrix is also applied to the glyph's advance
+    *   vector.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Glyph_Transform( FT_Glyph          glyph,
+                       const FT_Matrix*  matrix,
+                       const FT_Vector*  delta );
+@@ -654,7 +670,11 @@ FT_BEGIN_HEADER
+    *       FT_Done_Glyph( glyphs[idx] );
+    *   ```
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Glyph_To_Bitmap( FT_Glyph*         the_glyph,
+                       FT_Render_Mode    render_mode,
+                       const FT_Vector*  origin,
+@@ -731,7 +751,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Matrix_Invert( FT_Matrix*  matrix );
+ 
+   /* */
+diff --git a/src/3rdparty/freetype/include/freetype/ftgxval.h b/src/3rdparty/freetype/include/freetype/ftgxval.h
+index e8de9a6ed5..adcfe2f695 100644
+--- a/src/3rdparty/freetype/include/freetype/ftgxval.h
++++ b/src/3rdparty/freetype/include/freetype/ftgxval.h
+@@ -221,7 +221,11 @@ FT_BEGIN_HEADER
+    *   application hasn't asked for validation, or the validator doesn't have
+    *   the ability to validate the sfnt table.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_TrueTypeGX_Validate( FT_Face   face,
+                           FT_UInt   validation_flags,
+                           FT_Bytes  tables[FT_VALIDATE_GX_LENGTH],
+@@ -313,7 +317,11 @@ FT_BEGIN_HEADER
+    *   `ckern_table`, by calling @FT_ClassicKern_Free.  A `NULL` value
+    *   indicates that the table doesn't exist in the font.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_ClassicKern_Validate( FT_Face    face,
+                            FT_UInt    validation_flags,
+                            FT_Bytes  *ckern_table );
+diff --git a/src/3rdparty/freetype/include/freetype/ftgzip.h b/src/3rdparty/freetype/include/freetype/ftgzip.h
+index 443ec29db1..bdf7ff9de7 100644
+--- a/src/3rdparty/freetype/include/freetype/ftgzip.h
++++ b/src/3rdparty/freetype/include/freetype/ftgzip.h
+@@ -87,7 +87,11 @@ FT_BEGIN_HEADER
+    *   This function may return `FT_Err_Unimplemented_Feature` if your build
+    *   of FreeType was not compiled with zlib support.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stream_OpenGzip( FT_Stream  stream,
+                       FT_Stream  source );
+ 
+@@ -133,7 +137,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.5.1
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Gzip_Uncompress( FT_Memory       memory,
+                       FT_Byte*        output,
+                       FT_ULong*       output_len,
+diff --git a/src/3rdparty/freetype/include/freetype/ftlcdfil.h b/src/3rdparty/freetype/include/freetype/ftlcdfil.h
+index d3723e16f6..6baac540a6 100644
+--- a/src/3rdparty/freetype/include/freetype/ftlcdfil.h
++++ b/src/3rdparty/freetype/include/freetype/ftlcdfil.h
+@@ -206,7 +206,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.3.0
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Library_SetLcdFilter( FT_Library    library,
+                            FT_LcdFilter  filter );
+ 
+@@ -242,7 +246,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.4.0
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Library_SetLcdFilterWeights( FT_Library      library,
+                                   unsigned char  *weights );
+ 
+@@ -308,7 +316,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10.0
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Library_SetLcdGeometry( FT_Library  library,
+                              FT_Vector   sub[3] );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftlist.h b/src/3rdparty/freetype/include/freetype/ftlist.h
+index b553131335..b7ba7aafb5 100644
+--- a/src/3rdparty/freetype/include/freetype/ftlist.h
++++ b/src/3rdparty/freetype/include/freetype/ftlist.h
+@@ -219,7 +219,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   The result (a FreeType error code) of the last iterator call.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_List_Iterate( FT_List           list,
+                    FT_List_Iterator  iterator,
+                    void*             user );
+diff --git a/src/3rdparty/freetype/include/freetype/ftlzw.h b/src/3rdparty/freetype/include/freetype/ftlzw.h
+index adfd172479..e1a9f8be1f 100644
+--- a/src/3rdparty/freetype/include/freetype/ftlzw.h
++++ b/src/3rdparty/freetype/include/freetype/ftlzw.h
+@@ -85,7 +85,11 @@ FT_BEGIN_HEADER
+    *   This function may return `FT_Err_Unimplemented_Feature` if your build
+    *   of FreeType was not compiled with LZW support.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stream_OpenLZW( FT_Stream  stream,
+                      FT_Stream  source );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftmac.h b/src/3rdparty/freetype/include/freetype/ftmac.h
+index a91e38f9ea..38838d13e2 100644
+--- a/src/3rdparty/freetype/include/freetype/ftmac.h
++++ b/src/3rdparty/freetype/include/freetype/ftmac.h
+@@ -99,7 +99,11 @@ FT_BEGIN_HEADER
+    *     error = FT_New_Face_From_FOND( library, fond, 0, &face );
+    *   ```
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Face_From_FOND( FT_Library  library,
+                          Handle      fond,
+                          FT_Long     face_index,
+@@ -129,7 +133,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_GetFile_From_Mac_Name( const char*  fontName,
+                             FSSpec*      pathSpec,
+                             FT_Long*     face_index )
+@@ -158,7 +166,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_GetFile_From_Mac_ATS_Name( const char*  fontName,
+                                 FSSpec*      pathSpec,
+                                 FT_Long*     face_index )
+@@ -192,7 +204,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_GetFilePath_From_Mac_ATS_Name( const char*  fontName,
+                                     UInt8*       path,
+                                     UInt32       maxPathSize,
+@@ -231,7 +247,11 @@ FT_BEGIN_HEADER
+    *   @FT_New_Face_From_FSSpec is identical to @FT_New_Face except it
+    *   accepts an FSSpec instead of a path.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Face_From_FSSpec( FT_Library     library,
+                            const FSSpec  *spec,
+                            FT_Long        face_index,
+@@ -270,7 +290,11 @@ FT_BEGIN_HEADER
+    *   @FT_New_Face_From_FSRef is identical to @FT_New_Face except it accepts
+    *   an FSRef instead of a path.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Face_From_FSRef( FT_Library    library,
+                           const FSRef  *ref,
+                           FT_Long       face_index,
+diff --git a/src/3rdparty/freetype/include/freetype/ftmm.h b/src/3rdparty/freetype/include/freetype/ftmm.h
+index d145128a9b..5036b8306c 100644
+--- a/src/3rdparty/freetype/include/freetype/ftmm.h
++++ b/src/3rdparty/freetype/include/freetype/ftmm.h
+@@ -275,7 +275,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Multi_Master( FT_Face           face,
+                        FT_Multi_Master  *amaster );
+ 
+@@ -302,7 +306,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_MM_Var( FT_Face      face,
+                  FT_MM_Var*  *amaster );
+ 
+@@ -323,7 +331,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Done_MM_Var( FT_Library   library,
+                   FT_MM_Var   *amaster );
+ 
+@@ -365,7 +377,11 @@ FT_BEGIN_HEADER
+    *   (i.e., @FT_IS_VARIATION will return true).  If `num_coords` is zero,
+    *   this bit flag gets unset.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_MM_Design_Coordinates( FT_Face   face,
+                                 FT_UInt   num_coords,
+                                 FT_Long*  coords );
+@@ -412,7 +428,11 @@ FT_BEGIN_HEADER
+    *   (i.e., @FT_IS_VARIATION will return true).  If `num_coords` is zero,
+    *   this bit flag gets unset.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_Var_Design_Coordinates( FT_Face    face,
+                                  FT_UInt    num_coords,
+                                  FT_Fixed*  coords );
+@@ -452,7 +472,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.7.1
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Var_Design_Coordinates( FT_Face    face,
+                                  FT_UInt    num_coords,
+                                  FT_Fixed*  coords );
+@@ -498,7 +522,11 @@ FT_BEGIN_HEADER
+    *   (i.e., @FT_IS_VARIATION will return true).  If `num_coords` is zero,
+    *   this bit flag gets unset.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_MM_Blend_Coordinates( FT_Face    face,
+                                FT_UInt    num_coords,
+                                FT_Fixed*  coords );
+@@ -535,7 +563,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.7.1
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_MM_Blend_Coordinates( FT_Face    face,
+                                FT_UInt    num_coords,
+                                FT_Fixed*  coords );
+@@ -549,7 +581,11 @@ FT_BEGIN_HEADER
+    * @description:
+    *   This is another name of @FT_Set_MM_Blend_Coordinates.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_Var_Blend_Coordinates( FT_Face    face,
+                                 FT_UInt    num_coords,
+                                 FT_Fixed*  coords );
+@@ -566,7 +602,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.7.1
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Var_Blend_Coordinates( FT_Face    face,
+                                 FT_UInt    num_coords,
+                                 FT_Fixed*  coords );
+@@ -616,7 +656,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_MM_WeightVector( FT_Face    face,
+                           FT_UInt    len,
+                           FT_Fixed*  weightvector );
+@@ -660,7 +704,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_MM_WeightVector( FT_Face    face,
+                           FT_UInt*   len,
+                           FT_Fixed*  weightvector );
+@@ -712,7 +760,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.8.1
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Var_Axis_Flags( FT_MM_Var*  master,
+                          FT_UInt     axis_index,
+                          FT_UInt*    flags );
+@@ -751,7 +803,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.9
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_Named_Instance( FT_Face  face,
+                          FT_UInt  instance_index );
+ 
+@@ -790,7 +846,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.13.1
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Default_Named_Instance( FT_Face   face,
+                                  FT_UInt  *instance_index );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftmodapi.h b/src/3rdparty/freetype/include/freetype/ftmodapi.h
+index c8f0c2c2a4..312bc9f226 100644
+--- a/src/3rdparty/freetype/include/freetype/ftmodapi.h
++++ b/src/3rdparty/freetype/include/freetype/ftmodapi.h
+@@ -272,7 +272,11 @@ FT_BEGIN_HEADER
+    *   An error will be returned if a module already exists by that name, or
+    *   if the module requires a version of FreeType that is too great.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Add_Module( FT_Library              library,
+                  const FT_Module_Class*  clazz );
+ 
+@@ -326,7 +330,11 @@ FT_BEGIN_HEADER
+    * @note:
+    *   The module object is destroyed by the function in case of success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Remove_Module( FT_Library  library,
+                     FT_Module   module );
+ 
+@@ -409,7 +417,11 @@ FT_BEGIN_HEADER
+    *   2.4.11
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Property_Set( FT_Library        library,
+                    const FT_String*  module_name,
+                    const FT_String*  property_name,
+@@ -472,7 +484,11 @@ FT_BEGIN_HEADER
+    *   2.4.11
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Property_Get( FT_Library        library,
+                    const FT_String*  module_name,
+                    const FT_String*  property_name,
+@@ -547,7 +563,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.4.2
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Reference_Library( FT_Library  library );
+ 
+ 
+@@ -586,7 +606,11 @@ FT_BEGIN_HEADER
+    *   See the discussion of reference counters in the description of
+    *   @FT_Reference_Library.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Library( FT_Memory    memory,
+                   FT_Library  *alibrary );
+ 
+@@ -611,7 +635,11 @@ FT_BEGIN_HEADER
+    *   See the discussion of reference counters in the description of
+    *   @FT_Reference_Library.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Done_Library( FT_Library  library );
+ 
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/ftotval.h b/src/3rdparty/freetype/include/freetype/ftotval.h
+index 011bdfc837..96bfd9a3c0 100644
+--- a/src/3rdparty/freetype/include/freetype/ftotval.h
++++ b/src/3rdparty/freetype/include/freetype/ftotval.h
+@@ -160,7 +160,11 @@ FT_BEGIN_HEADER
+    *   doesn't exist in the font, or the application hasn't asked for
+    *   validation.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_OpenType_Validate( FT_Face    face,
+                         FT_UInt    validation_flags,
+                         FT_Bytes  *BASE_table,
+diff --git a/src/3rdparty/freetype/include/freetype/ftoutln.h b/src/3rdparty/freetype/include/freetype/ftoutln.h
+index f9329ca40c..cd6aacbc00 100644
+--- a/src/3rdparty/freetype/include/freetype/ftoutln.h
++++ b/src/3rdparty/freetype/include/freetype/ftoutln.h
+@@ -121,7 +121,11 @@ FT_BEGIN_HEADER
+    *   (doing nothing, that is, not calling any emitter); if necessary, you
+    *   should filter this out, too.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Decompose( FT_Outline*              outline,
+                         const FT_Outline_Funcs*  func_interface,
+                         void*                    user );
+@@ -160,7 +164,11 @@ FT_BEGIN_HEADER
+    *   The reason why this function takes a `library` parameter is simply to
+    *   use the library's memory allocator.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_New( FT_Library   library,
+                   FT_UInt      numPoints,
+                   FT_Int       numContours,
+@@ -189,7 +197,11 @@ FT_BEGIN_HEADER
+    *   If the outline's 'owner' field is not set, only the outline descriptor
+    *   will be released.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Done( FT_Library   library,
+                    FT_Outline*  outline );
+ 
+@@ -213,7 +225,11 @@ FT_BEGIN_HEADER
+    *   An empty outline, or an outline with a single point only is also
+    *   valid.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Check( FT_Outline*  outline );
+ 
+ 
+@@ -296,7 +312,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Copy( const FT_Outline*  source,
+                    FT_Outline        *target );
+ 
+@@ -372,7 +392,11 @@ FT_BEGIN_HEADER
+    *   ```
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Embolden( FT_Outline*  outline,
+                        FT_Pos       strength );
+ 
+@@ -390,7 +414,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.4.10
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_EmboldenXY( FT_Outline*  outline,
+                          FT_Pos       xstrength,
+                          FT_Pos       ystrength );
+@@ -454,7 +482,11 @@ FT_BEGIN_HEADER
+    *   select the gray-level rasterizer, and you want less than 256 gray
+    *   levels, you have to use @FT_Outline_Render directly.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Get_Bitmap( FT_Library        library,
+                          FT_Outline*       outline,
+                          const FT_Bitmap  *abitmap );
+@@ -492,7 +524,11 @@ FT_BEGIN_HEADER
+    *   allowing FreeType rasterizer to be used for direct composition,
+    *   translucency, etc.  See @FT_Raster_Params for more details.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Outline_Render( FT_Library         library,
+                      FT_Outline*        outline,
+                      FT_Raster_Params*  params );
+diff --git a/src/3rdparty/freetype/include/freetype/ftpfr.h b/src/3rdparty/freetype/include/freetype/ftpfr.h
+index 7111d40a0c..20fd8e4318 100644
+--- a/src/3rdparty/freetype/include/freetype/ftpfr.h
++++ b/src/3rdparty/freetype/include/freetype/ftpfr.h
+@@ -86,7 +86,11 @@ FT_BEGIN_HEADER
+    *   If the input face is not a PFR, this function will return an error.
+    *   However, in all cases, it will return valid values.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_PFR_Metrics( FT_Face    face,
+                       FT_UInt   *aoutline_resolution,
+                       FT_UInt   *ametrics_resolution,
+@@ -129,7 +133,11 @@ FT_BEGIN_HEADER
+    *    You can use the value of the `x_scale` and `y_scale` parameters
+    *    returned by @FT_Get_PFR_Metrics to scale these to device subpixels.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_PFR_Kerning( FT_Face     face,
+                       FT_UInt     left,
+                       FT_UInt     right,
+@@ -163,7 +171,11 @@ FT_BEGIN_HEADER
+    *    You can use the `x_scale` or `y_scale` results of @FT_Get_PFR_Metrics
+    *    to convert the advance to device subpixels (i.e., 1/64 of pixels).
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_PFR_Advance( FT_Face   face,
+                       FT_UInt   gindex,
+                       FT_Pos   *aadvance );
+diff --git a/src/3rdparty/freetype/include/freetype/ftrender.h b/src/3rdparty/freetype/include/freetype/ftrender.h
+index 0b6fad32e8..41d41ff9a6 100644
+--- a/src/3rdparty/freetype/include/freetype/ftrender.h
++++ b/src/3rdparty/freetype/include/freetype/ftrender.h
+@@ -227,7 +227,11 @@ FT_BEGIN_HEADER
+    *   Currently, no FreeType renderer module uses `parameters`; you should
+    *   thus always pass `NULL` as the value.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Set_Renderer( FT_Library     library,
+                    FT_Renderer    renderer,
+                    FT_UInt        num_params,
+diff --git a/src/3rdparty/freetype/include/freetype/ftsizes.h b/src/3rdparty/freetype/include/freetype/ftsizes.h
+index 7bfb1aed4c..94f5575491 100644
+--- a/src/3rdparty/freetype/include/freetype/ftsizes.h
++++ b/src/3rdparty/freetype/include/freetype/ftsizes.h
+@@ -95,7 +95,11 @@ FT_BEGIN_HEADER
+    *   upcoming calls to @FT_Set_Pixel_Sizes, @FT_Set_Char_Size,
+    *   @FT_Load_Glyph, @FT_Load_Char, etc.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Size( FT_Face   face,
+                FT_Size*  size );
+ 
+@@ -116,7 +120,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Done_Size( FT_Size  size );
+ 
+ 
+@@ -145,7 +153,11 @@ FT_BEGIN_HEADER
+    *   If `face` is the size's parent face object, this function changes the
+    *   value of `face->size` to the input size handle.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Activate_Size( FT_Size  size );
+ 
+   /* */
+diff --git a/src/3rdparty/freetype/include/freetype/ftsnames.h b/src/3rdparty/freetype/include/freetype/ftsnames.h
+index 9d5d22bb25..50e11a2653 100644
+--- a/src/3rdparty/freetype/include/freetype/ftsnames.h
++++ b/src/3rdparty/freetype/include/freetype/ftsnames.h
+@@ -177,7 +177,11 @@ FT_BEGIN_HEADER
+    *   This function always returns an error if the config macro
+    *   `TT_CONFIG_OPTION_SFNT_NAMES` is not defined in `ftoption.h`.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Sfnt_Name( FT_Face       face,
+                     FT_UInt       idx,
+                     FT_SfntName  *aname );
+@@ -255,7 +259,11 @@ FT_BEGIN_HEADER
+    * @since:
+    *   2.8
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_Sfnt_LangTag( FT_Face          face,
+                        FT_UInt          langID,
+                        FT_SfntLangTag  *alangTag );
+diff --git a/src/3rdparty/freetype/include/freetype/ftstroke.h b/src/3rdparty/freetype/include/freetype/ftstroke.h
+index b3d90802a5..7b7e6542e6 100644
+--- a/src/3rdparty/freetype/include/freetype/ftstroke.h
++++ b/src/3rdparty/freetype/include/freetype/ftstroke.h
+@@ -265,7 +265,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *    FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_New( FT_Library   library,
+                   FT_Stroker  *astroker );
+ 
+@@ -365,7 +369,11 @@ FT_BEGIN_HEADER
+    *
+    *   This function calls @FT_Stroker_Rewind automatically.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_ParseOutline( FT_Stroker   stroker,
+                            FT_Outline*  outline,
+                            FT_Bool      opened );
+@@ -396,7 +404,11 @@ FT_BEGIN_HEADER
+    *   This function is useful when you need to stroke a path that is not
+    *   stored as an @FT_Outline object.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_BeginSubPath( FT_Stroker  stroker,
+                            FT_Vector*  to,
+                            FT_Bool     open );
+@@ -422,7 +434,11 @@ FT_BEGIN_HEADER
+    *   subpath was not 'opened', this function 'draws' a single line segment
+    *   to the start position when needed.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_EndSubPath( FT_Stroker  stroker );
+ 
+ 
+@@ -449,7 +465,11 @@ FT_BEGIN_HEADER
+    *   You should call this function between @FT_Stroker_BeginSubPath and
+    *   @FT_Stroker_EndSubPath.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_LineTo( FT_Stroker  stroker,
+                      FT_Vector*  to );
+ 
+@@ -480,7 +500,11 @@ FT_BEGIN_HEADER
+    *   You should call this function between @FT_Stroker_BeginSubPath and
+    *   @FT_Stroker_EndSubPath.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_ConicTo( FT_Stroker  stroker,
+                       FT_Vector*  control,
+                       FT_Vector*  to );
+@@ -515,7 +539,11 @@ FT_BEGIN_HEADER
+    *   You should call this function between @FT_Stroker_BeginSubPath and
+    *   @FT_Stroker_EndSubPath.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_CubicTo( FT_Stroker  stroker,
+                       FT_Vector*  control1,
+                       FT_Vector*  control2,
+@@ -561,7 +589,11 @@ FT_BEGIN_HEADER
+    *   Use the function @FT_Stroker_GetCounts instead if you want to retrieve
+    *   the counts associated to both borders.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_GetBorderCounts( FT_Stroker        stroker,
+                               FT_StrokerBorder  border,
+                               FT_UInt          *anum_points,
+@@ -635,7 +667,11 @@ FT_BEGIN_HEADER
+    * @return:
+    *   FreeType error code.  0~means success.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Stroker_GetCounts( FT_Stroker  stroker,
+                         FT_UInt    *anum_points,
+                         FT_UInt    *anum_contours );
+@@ -711,7 +747,11 @@ FT_BEGIN_HEADER
+    *   may need to manually adjust horizontal and vertical advance amounts to
+    *   account for this added size.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Glyph_Stroke( FT_Glyph    *pglyph,
+                    FT_Stroker   stroker,
+                    FT_Bool      destroy );
+@@ -752,7 +792,11 @@ FT_BEGIN_HEADER
+    *   may need to manually adjust horizontal and vertical advance amounts to
+    *   account for this added size.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Glyph_StrokeBorder( FT_Glyph    *pglyph,
+                          FT_Stroker   stroker,
+                          FT_Bool      inside,
+diff --git a/src/3rdparty/freetype/include/freetype/ftwinfnt.h b/src/3rdparty/freetype/include/freetype/ftwinfnt.h
+index 7b701ea59b..062f9e825d 100644
+--- a/src/3rdparty/freetype/include/freetype/ftwinfnt.h
++++ b/src/3rdparty/freetype/include/freetype/ftwinfnt.h
+@@ -256,7 +256,11 @@ FT_BEGIN_HEADER
+    *   This function only works with Windows FNT faces, returning an error
+    *   otherwise.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_WinFNT_Header( FT_Face               face,
+                         FT_WinFNT_HeaderRec  *aheader );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/internal/ftvalid.h b/src/3rdparty/freetype/include/freetype/internal/ftvalid.h
+index e98ee4e473..cc5e5f910c 100644
+--- a/src/3rdparty/freetype/include/freetype/internal/ftvalid.h
++++ b/src/3rdparty/freetype/include/freetype/internal/ftvalid.h
+@@ -88,7 +88,9 @@ FT_BEGIN_HEADER
+   /* validator structure */
+   typedef struct  FT_ValidatorRec_
+   {
++#if !defined(__wasi__)
+     ft_jmp_buf          jump_buffer; /* used for exception handling      */
++#endif
+ 
+     const FT_Byte*      base;        /* address of table in memory       */
+     const FT_Byte*      limit;       /* `base' + sizeof(table) in memory */
+@@ -103,7 +105,7 @@ FT_BEGIN_HEADER
+ 
+ #define FT_VALIDATOR( x )  ( (FT_Validator)( x ) )
+ 
+-
++#if !defined(__wasi__)
+   FT_BASE( void )
+   ft_validator_init( FT_Validator        valid,
+                      const FT_Byte*      base,
+@@ -122,14 +124,21 @@ FT_BEGIN_HEADER
+   FT_BASE( void )
+   ft_validator_error( FT_Validator  valid,
+                       FT_Error      error );
++#endif
+ 
+ 
+   /* Calls ft_validate_error.  Assumes that the `valid' local variable */
+   /* holds a pointer to the current validator object.                  */
+   /*                                                                   */
+-#define FT_INVALID( _error )  FT_INVALID_( _error )
+-#define FT_INVALID_( _error ) \
++#if !defined(__wasi__)
++#  define FT_INVALID( _error )  FT_INVALID_( _error )
++#  define FT_INVALID_( _error ) \
+           ft_validator_error( valid, FT_THROW( _error ) )
++#else
++#  define FT_INVALID( _error )  FT_INVALID_( _error )
++#  define FT_INVALID_( _error ) \
++          // ft_validator_error( valid, FT_THROW( _error ) )
++#endif
+ 
+   /* called when a broken table is detected */
+ #define FT_INVALID_TOO_SHORT \
+diff --git a/src/3rdparty/freetype/include/freetype/internal/services/svgxval.h b/src/3rdparty/freetype/include/freetype/internal/services/svgxval.h
+index 31016afe0d..d699d3fec4 100644
+--- a/src/3rdparty/freetype/include/freetype/internal/services/svgxval.h
++++ b/src/3rdparty/freetype/include/freetype/internal/services/svgxval.h
+@@ -37,6 +37,7 @@ FT_BEGIN_HEADER
+ #define FT_SERVICE_ID_GX_VALIDATE           "truetypegx-validate"
+ #define FT_SERVICE_ID_CLASSICKERN_VALIDATE  "classickern-validate"
+ 
++#if !defined(__wasi__)
+   typedef FT_Error
+   (*gxv_validate_func)( FT_Face   face,
+                         FT_UInt   gx_flags,
+@@ -59,6 +60,7 @@ FT_BEGIN_HEADER
+   {
+     ckern_validate_func  validate;
+   };
++#endif
+ 
+   /* */
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/t1tables.h b/src/3rdparty/freetype/include/freetype/t1tables.h
+index 1aecfbbd90..39d56789df 100644
+--- a/src/3rdparty/freetype/include/freetype/t1tables.h
++++ b/src/3rdparty/freetype/include/freetype/t1tables.h
+@@ -514,7 +514,11 @@ FT_BEGIN_HEADER
+    *   ```
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_PS_Font_Info( FT_Face      face,
+                        PS_FontInfo  afont_info );
+ 
+@@ -557,7 +561,11 @@ FT_BEGIN_HEADER
+    *   ```
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Get_PS_Font_Private( FT_Face     face,
+                           PS_Private  afont_private );
+ 
+diff --git a/src/3rdparty/freetype/include/freetype/tttables.h b/src/3rdparty/freetype/include/freetype/tttables.h
+index a9f60e7620..fca5bf5506 100644
+--- a/src/3rdparty/freetype/include/freetype/tttables.h
++++ b/src/3rdparty/freetype/include/freetype/tttables.h
+@@ -751,7 +751,11 @@ FT_BEGIN_HEADER
+    *   size (e.g. 32bit vs. 64bit) or order (big endian vs. little endian).
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Load_Sfnt_Table( FT_Face    face,
+                       FT_ULong   tag,
+                       FT_Long    offset,
+@@ -794,7 +798,11 @@ FT_BEGIN_HEADER
+    *   missing.
+    *
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_Sfnt_Table_Info( FT_Face    face,
+                       FT_UInt    table_index,
+                       FT_ULong  *tag,
+diff --git a/src/3rdparty/freetype/src/base/ftglyph.c b/src/3rdparty/freetype/src/base/ftglyph.c
+index 393d4949f8..0b37d4bb51 100644
+--- a/src/3rdparty/freetype/src/base/ftglyph.c
++++ b/src/3rdparty/freetype/src/base/ftglyph.c
+@@ -594,7 +594,11 @@
+ 
+   /* documentation is in ftglyph.h */
+ 
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   FT_New_Glyph( FT_Library       library,
+                 FT_Glyph_Format  format,
+                 FT_Glyph        *aglyph )
+diff --git a/src/3rdparty/freetype/src/base/ftgxval.c b/src/3rdparty/freetype/src/base/ftgxval.c
+index 6b3c5d2484..582ef79a29 100644
+--- a/src/3rdparty/freetype/src/base/ftgxval.c
++++ b/src/3rdparty/freetype/src/base/ftgxval.c
+@@ -33,6 +33,7 @@
+ 
+   /* documentation is in ftgxval.h */
+ 
++#if !defined(__wasi__)
+   FT_EXPORT_DEF( FT_Error )
+   FT_TrueTypeGX_Validate( FT_Face   face,
+                           FT_UInt   validation_flags,
+@@ -68,6 +69,7 @@
+   Exit:
+     return error;
+   }
++#endif
+ 
+ 
+   FT_EXPORT_DEF( void )
+@@ -86,6 +88,7 @@
+   }
+ 
+ 
++#if !defined(__wasi__)
+   FT_EXPORT_DEF( FT_Error )
+   FT_ClassicKern_Validate( FT_Face    face,
+                            FT_UInt    validation_flags,
+@@ -119,6 +122,7 @@
+   Exit:
+     return error;
+   }
++#endif
+ 
+ 
+   FT_EXPORT_DEF( void )
+diff --git a/src/3rdparty/freetype/src/base/ftobjs.c b/src/3rdparty/freetype/src/base/ftobjs.c
+index 89a25bc732..ef83e5c6b8 100644
+--- a/src/3rdparty/freetype/src/base/ftobjs.c
++++ b/src/3rdparty/freetype/src/base/ftobjs.c
+@@ -157,7 +157,7 @@
+     return -1;
+   }
+ 
+-
++#if !defined(__wasi__)
+   FT_BASE_DEF( void )
+   ft_validator_error( FT_Validator  valid,
+                       FT_Error      error )
+@@ -174,6 +174,7 @@
+     /* compiler may warn about an unused local variable   */
+     ft_longjmp( *(ft_jmp_buf*) jump_buffer, 1 );
+   }
++#endif
+ 
+ 
+   /*************************************************************************/
+diff --git a/src/3rdparty/freetype/src/sfnt/pngshim.c b/src/3rdparty/freetype/src/sfnt/pngshim.c
+index 33712162e0..7fc09adc51 100644
+--- a/src/3rdparty/freetype/src/sfnt/pngshim.c
++++ b/src/3rdparty/freetype/src/sfnt/pngshim.c
+@@ -313,11 +313,13 @@
+       goto Exit;
+     }
+ 
++#if !defined(__wasi__)
+     if ( ft_setjmp( png_jmpbuf( png ) ) )
+     {
+       error = FT_THROW( Invalid_File_Format );
+       goto DestroyExit;
+     }
++#endif
+ 
+     png_set_read_fn( png, &stream, read_data_from_FT_Stream );
+ 
+diff --git a/src/3rdparty/freetype/src/sfnt/ttcmap.c b/src/3rdparty/freetype/src/sfnt/ttcmap.c
+index 9ba25dcbc1..98487694ac 100644
+--- a/src/3rdparty/freetype/src/sfnt/ttcmap.c
++++ b/src/3rdparty/freetype/src/sfnt/ttcmap.c
+@@ -202,7 +202,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     0,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap0_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap0_get_info   /* get_cmap_info */
+   )
+ 
+@@ -619,7 +621,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     2,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap2_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap2_get_info   /* get_cmap_info */
+   )
+ 
+@@ -1562,7 +1566,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     4,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap4_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap4_get_info   /* get_cmap_info */
+   )
+ 
+@@ -1735,7 +1741,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     6,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap6_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap6_get_info   /* get_cmap_info */
+   )
+ 
+@@ -2032,7 +2040,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     8,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap8_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap8_get_info   /* get_cmap_info */
+   )
+ 
+@@ -2207,7 +2217,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     10,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap10_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap10_get_info   /* get_cmap_info */
+   )
+ 
+@@ -2551,7 +2563,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     12,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap12_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap12_get_info   /* get_cmap_info */
+   )
+ 
+@@ -2867,7 +2881,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     13,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap13_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap13_get_info   /* get_cmap_info */
+   )
+ 
+@@ -3644,7 +3660,9 @@
+       (FT_CMap_VariantCharListFunc) tt_cmap14_variant_chars,
+ 
+     14,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)tt_cmap14_validate,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)tt_cmap14_get_info   /* get_cmap_info */
+   )
+ 
+@@ -3757,7 +3775,9 @@
+       (FT_CMap_VariantCharListFunc) NULL,  /* variantchar_list */
+ 
+     ~0U,
++#if !defined(__wasi__)
+     (TT_CMap_ValidateFunc)NULL,  /* validate      */
++#endif
+     (TT_CMap_Info_GetFunc)NULL   /* get_cmap_info */
+   )
+ 
+@@ -3834,19 +3854,24 @@
+             volatile TT_ValidatorRec  valid;
+             volatile FT_Error         error = FT_Err_Ok;
+ 
+-
++#if !defined(__wasi__)
+             ft_validator_init( FT_VALIDATOR( &valid ), cmap, limit,
+                                FT_VALIDATE_DEFAULT );
++#endif
+ 
+             valid.num_glyphs = (FT_UInt)face->max_profile.numGlyphs;
+ 
++#if !defined(__wasi__)
+             if ( ft_setjmp( FT_VALIDATOR( &valid )->jump_buffer) == 0 )
+             {
+               /* validate this cmap sub-table */
+               error = clazz->validate( cmap, FT_VALIDATOR( &valid ) );
+             }
++#endif
+ 
++#if !defined(__wasi__)
+             if ( !valid.validator.error )
++#endif
+             {
+               FT_CMap  ttcmap;
+ 
+@@ -3863,11 +3888,13 @@
+                 ((TT_CMap)ttcmap)->flags = (FT_Int)error;
+               }
+             }
++#if !defined(__wasi__)
+             else
+             {
+               FT_TRACE0(( "tt_face_build_cmaps:"
+                           " broken cmap sub-table ignored\n" ));
+             }
++#endif
+             break;
+           }
+         }
+diff --git a/src/3rdparty/freetype/src/sfnt/ttcmap.h b/src/3rdparty/freetype/src/sfnt/ttcmap.h
+index ff52917ed5..a84432b409 100644
+--- a/src/3rdparty/freetype/src/sfnt/ttcmap.h
++++ b/src/3rdparty/freetype/src/sfnt/ttcmap.h
+@@ -40,21 +40,24 @@ FT_BEGIN_HEADER
+ 
+   typedef const struct TT_CMap_ClassRec_*  TT_CMap_Class;
+ 
+-
++#if !defined(__wasi__)
+   typedef FT_Error
+   (*TT_CMap_ValidateFunc)( FT_Byte*      data,
+                            FT_Validator  valid );
++#endif
+ 
+   typedef struct  TT_CMap_ClassRec_
+   {
+     FT_CMap_ClassRec      clazz;
+     FT_UInt               format;
++#if !defined(__wasi__)
+     TT_CMap_ValidateFunc  validate;
++#endif
+     TT_CMap_Info_GetFunc  get_cmap_info;
+ 
+   } TT_CMap_ClassRec;
+ 
+-
++#if !defined(__wasi__)
+ #define FT_DEFINE_TT_CMAP( class_,             \
+                            size_,              \
+                            init_,              \
+@@ -88,6 +91,39 @@ FT_BEGIN_HEADER
+     validate_,                                 \
+     get_cmap_info_                             \
+   };
++#else
++#define FT_DEFINE_TT_CMAP( class_,             \
++                           size_,              \
++                           init_,              \
++                           done_,              \
++                           char_index_,        \
++                           char_next_,         \
++                           char_var_index_,    \
++                           char_var_default_,  \
++                           variant_list_,      \
++                           charvariant_list_,  \
++                           variantchar_list_,  \
++                           format_,            \
++                           get_cmap_info_ )    \
++  FT_CALLBACK_TABLE_DEF                        \
++  const TT_CMap_ClassRec  class_ =             \
++  {                                            \
++    { size_,                                   \
++      init_,                                   \
++      done_,                                   \
++      char_index_,                             \
++      char_next_,                              \
++      char_var_index_,                         \
++      char_var_default_,                       \
++      variant_list_,                           \
++      charvariant_list_,                       \
++      variantchar_list_                        \
++    },                                         \
++                                               \
++    format_,                                   \
++    get_cmap_info_                             \
++  };
++#endif
+ 
+ 
+ #undef  TTCMAPCITEM
+@@ -97,7 +133,9 @@ FT_BEGIN_HEADER
+ 
+   typedef struct  TT_ValidatorRec_
+   {
++#if !defined(__wasi__)
+     FT_ValidatorRec  validator;
++#endif
+     FT_UInt          num_glyphs;
+ 
+   } TT_ValidatorRec, *TT_Validator;
+diff --git a/src/3rdparty/freetype/src/smooth/ftgrays.c b/src/3rdparty/freetype/src/smooth/ftgrays.c
+index 0918272f87..7436a8f145 100644
+--- a/src/3rdparty/freetype/src/smooth/ftgrays.c
++++ b/src/3rdparty/freetype/src/smooth/ftgrays.c
+@@ -489,7 +489,9 @@ typedef ptrdiff_t  FT_PtrDist;
+ 
+   typedef struct  gray_TWorker_
+   {
++#if !defined(__wasi__)
+     ft_jmp_buf  jump_buffer;
++#endif
+ 
+     TCoord  min_ex, max_ex;  /* min and max integer pixel coordinates */
+     TCoord  min_ey, max_ey;
+@@ -612,8 +614,10 @@ typedef ptrdiff_t  FT_PtrDist;
+ 
+       /* insert new cell */
+       cell = ras.cell_free++;
++#if !defined(__wasi__)
+       if ( cell >= ras.cell_null )
+         ft_longjmp( ras.jump_buffer, 1 );
++#endif
+ 
+       cell->x     = ex;
+       cell->area  = 0;
+@@ -1926,7 +1930,9 @@ typedef ptrdiff_t  FT_PtrDist;
+     volatile int  error;
+ 
+ 
++#if !defined(__wasi__)
+     if ( ft_setjmp( ras.jump_buffer ) == 0 )
++#endif
+     {
+       if ( continued )
+         FT_Trace_Disable();
+@@ -1940,6 +1946,7 @@ typedef ptrdiff_t  FT_PtrDist;
+                   ras.cell_null - ras.cell_free,
+                   ras.cell_null - ras.cell_free == 1 ? "" : "s" ));
+     }
++#if !defined(__wasi__)
+     else
+     {
+       error = FT_THROW( Raster_Overflow );
+@@ -1947,6 +1954,7 @@ typedef ptrdiff_t  FT_PtrDist;
+       FT_TRACE7(( "band [%d..%d]: to be bisected\n",
+                   ras.min_ey, ras.max_ey ));
+     }
++#endif
+ 
+     return error;
+   }
+diff --git a/src/3rdparty/freetype/src/truetype/ttinterp.h b/src/3rdparty/freetype/src/truetype/ttinterp.h
+index e98e258fe7..3aa76cbd39 100644
+--- a/src/3rdparty/freetype/src/truetype/ttinterp.h
++++ b/src/3rdparty/freetype/src/truetype/ttinterp.h
+@@ -453,7 +453,11 @@ FT_BEGIN_HEADER
+    *   This function is publicly exported because it is directly
+    *   invoked by the TrueType debugger.
+    */
++#if defined(__wasi__)
++  FT_EXPORT( int )
++#else
+   FT_EXPORT( FT_Error )
++#endif
+   TT_RunIns( void*  exec );
+ 
+ 
+diff --git a/src/3rdparty/harfbuzz-ng/CMakeLists.txt b/src/3rdparty/harfbuzz-ng/CMakeLists.txt
+index 96e21941b2..e2c7bcdc28 100644
+--- a/src/3rdparty/harfbuzz-ng/CMakeLists.txt
++++ b/src/3rdparty/harfbuzz-ng/CMakeLists.txt
+@@ -90,7 +90,7 @@ qt_set_symbol_visibility_hidden(BundledHarfbuzz)
+ ## Scopes:
+ #####################################################################
+ 
+-qt_internal_extend_target(BundledHarfbuzz CONDITION UNIX
++qt_internal_extend_target(BundledHarfbuzz CONDITION (UNIX OR WASI)
+     DEFINES
+         HAVE_PTHREAD
+         HAVE_SCHED_H
+diff --git a/src/3rdparty/libpng/pngconf.h b/src/3rdparty/libpng/pngconf.h
+index 6671e3c335..6bc2976365 100644
+--- a/src/3rdparty/libpng/pngconf.h
++++ b/src/3rdparty/libpng/pngconf.h
+@@ -21,6 +21,13 @@
+ #ifndef PNGCONF_H
+ #define PNGCONF_H
+ 
++#if defined(__wasi__)
++#  define PNG_SETJMP_NOT_SUPPORTED
++#  undef PNG_SETJMP_SUPPORTED
++#  undef PNG_SIMPLIFIED_READ_SUPPORTED
++#  undef PNG_SIMPLIFIED_WRITE_SUPPORTED
++#endif
++
+ #ifndef PNG_BUILDING_SYMBOL_TABLE /* else includes may cause problems */
+ 
+ /* From libpng 1.6.0 libpng requires an ANSI X3.159-1989 ("ISOC90") compliant C
+diff --git a/src/corelib/CMakeLists.txt b/src/corelib/CMakeLists.txt
+index 31b81734e8..8fb9043c8d 100644
+--- a/src/corelib/CMakeLists.txt
++++ b/src/corelib/CMakeLists.txt
+@@ -644,7 +644,7 @@ if(GCC)
+                                 PROPERTIES COMPILE_OPTIONS "-fno-lto")
+ endif()
+ 
+-qt_internal_extend_target(Core CONDITION UNIX
++qt_internal_extend_target(Core CONDITION (UNIX OR WASI)
+     SOURCES
+         io/qfilesystemengine_unix.cpp
+         io/qfilesystemiterator_unix.cpp
+@@ -668,7 +668,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_thread
+         thread/qthreadstorage.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_thread AND UNIX
++qt_internal_extend_target(Core CONDITION QT_FEATURE_thread AND (UNIX OR WASI)
+     SOURCES
+         thread/qwaitcondition_unix.cpp
+ )
+@@ -678,7 +678,7 @@ qt_internal_extend_target(Core CONDITION APPLE AND QT_FEATURE_thread
+         thread/qmutex_mac.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_thread AND UNIX AND NOT APPLE AND NOT LINUX
++qt_internal_extend_target(Core CONDITION QT_FEATURE_thread AND (UNIX OR WASI) AND NOT APPLE AND NOT LINUX
+     SOURCES
+         thread/qmutex_unix.cpp
+ )
+@@ -761,7 +761,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_easingcurve
+         tools/qtimeline.cpp tools/qtimeline.h
+ )
+ 
+-qt_internal_extend_target(Core CONDITION UNIX AND NOT HAIKU AND NOT INTEGRITY AND NOT VXWORKS AND NOT WASM AND NOT MACOS
++qt_internal_extend_target(Core CONDITION (UNIX OR WASI) AND NOT HAIKU AND NOT INTEGRITY AND NOT VXWORKS AND NOT WASM AND NOT MACOS
+     LIBRARIES
+         m
+ )
+@@ -771,7 +771,7 @@ qt_internal_extend_target(Core CONDITION APPLE
+         text/qlocale_mac.mm
+ )
+ 
+-qt_internal_extend_target(Core CONDITION UNIX AND NOT APPLE
++qt_internal_extend_target(Core CONDITION (UNIX OR WASI) AND NOT APPLE
+     SOURCES
+         text/qlocale_unix.cpp
+ )
+@@ -805,7 +805,7 @@ qt_internal_extend_target(Core CONDITION MACOS AND NOT QT_FEATURE_icu
+         text/qcollator_macx.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION UNIX AND NOT MACOS AND NOT QT_FEATURE_icu
++qt_internal_extend_target(Core CONDITION (UNIX OR WASI) AND NOT MACOS AND NOT QT_FEATURE_icu
+     SOURCES
+         text/qcollator_posix.cpp
+ )
+@@ -855,12 +855,12 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND ANDROID AND NOT
+         time/qtimezoneprivate_android.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND UNIX AND NOT ANDROID AND NOT APPLE
++qt_internal_extend_target(Core CONDITION QT_FEATURE_timezone AND (UNIX OR WASI) AND NOT ANDROID AND NOT APPLE
+     SOURCES
+         time/qtimezoneprivate_tz.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND UNIX AND NOT ANDROID AND NOT APPLE
++qt_internal_extend_target(Core CONDITION QT_FEATURE_icu AND QT_FEATURE_timezone AND (UNIX OR WASI) AND NOT ANDROID AND NOT APPLE
+     SOURCES
+         time/qtimezoneprivate_icu.cpp
+ )
+@@ -901,12 +901,12 @@ qt_internal_extend_target(Core CONDITION MACOS AND QT_FEATURE_filesystemwatcher
+         io/qfilesystemwatcher_fsevents.mm io/qfilesystemwatcher_fsevents_p.h
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_filesystemwatcher AND QT_FEATURE_inotify AND UNIX AND NOT MACOS
++qt_internal_extend_target(Core CONDITION QT_FEATURE_filesystemwatcher AND QT_FEATURE_inotify AND (UNIX OR WASI) AND NOT MACOS
+     SOURCES
+         io/qfilesystemwatcher_inotify.cpp io/qfilesystemwatcher_inotify_p.h
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_filesystemwatcher AND UNIX AND NOT MACOS AND NOT QT_FEATURE_inotify AND (APPLE OR FREEBSD OR NETBSD OR OPENBSD)
++qt_internal_extend_target(Core CONDITION QT_FEATURE_filesystemwatcher AND (UNIX OR WASI) AND NOT MACOS AND NOT QT_FEATURE_inotify AND (APPLE OR FREEBSD OR NETBSD OR OPENBSD)
+     SOURCES
+         io/qfilesystemwatcher_kqueue.cpp io/qfilesystemwatcher_kqueue_p.h
+ )
+@@ -921,7 +921,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_processenvironment AND WIN32
+         io/qprocess_win.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_processenvironment AND UNIX
++qt_internal_extend_target(Core CONDITION QT_FEATURE_processenvironment AND (UNIX OR WASI)
+     SOURCES
+         io/qprocess_unix.cpp
+ )
+@@ -951,7 +951,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_filesystemiterator AND WIN32
+         io/qfilesystemiterator_win.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_process AND UNIX
++qt_internal_extend_target(Core CONDITION QT_FEATURE_process AND (UNIX OR WASI)
+     SOURCES
+         ../3rdparty/forkfd/forkfd.h
+         io/forkfd_qt.cpp
+@@ -1004,7 +1004,7 @@ qt_internal_extend_target(Core CONDITION HAIKU AND NOT ANDROID
+         be
+ )
+ 
+-qt_internal_extend_target(Core CONDITION UNIX AND NOT APPLE AND NOT HAIKU AND NOT ANDROID
++qt_internal_extend_target(Core CONDITION (UNIX OR WASI) AND NOT APPLE AND NOT HAIKU AND NOT ANDROID
+     SOURCES
+         io/qstandardpaths_unix.cpp
+         io/qstorageinfo_unix.cpp
+@@ -1060,7 +1060,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND APPLE
+         plugin/qlibrary_unix.cpp
+         plugin/qmachparser.cpp plugin/qmachparser_p.h
+ )
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND UNIX AND NOT APPLE
++qt_internal_extend_target(Core CONDITION QT_FEATURE_library AND (UNIX OR WASI) AND NOT APPLE
+     SOURCES
+         plugin/qelfparser_p.cpp plugin/qelfparser_p.h
+         plugin/qlibrary_unix.cpp
+@@ -1081,12 +1081,12 @@ qt_internal_extend_target(Core CONDITION WATCHOS
+         ${FWWatchKit}
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_poll_select AND UNIX
++qt_internal_extend_target(Core CONDITION QT_FEATURE_poll_select AND (UNIX OR WASI)
+     SOURCES
+         kernel/qpoll.cpp
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_glib AND UNIX
++qt_internal_extend_target(Core CONDITION QT_FEATURE_glib AND (UNIX OR WASI)
+     SOURCES
+         kernel/qeventdispatcher_glib.cpp kernel/qeventdispatcher_glib_p.h
+     LIBRARIES
+@@ -1098,7 +1098,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_clock_gettime
+         WrapRt::WrapRt
+ )
+ 
+-qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_shm AND UNIX
++qt_internal_extend_target(Core CONDITION QT_FEATURE_posix_shm AND (UNIX OR WASI)
+     SOURCES
+         ipc/qsharedmemory_posix.cpp
+     LIBRARIES
+diff --git a/src/corelib/global/qlogging.cpp b/src/corelib/global/qlogging.cpp
+index 627d62ed87..5aa687d6a2 100644
+--- a/src/corelib/global/qlogging.cpp
++++ b/src/corelib/global/qlogging.cpp
+@@ -92,7 +92,11 @@ static long qt_gettid()
+ {
+     // no error handling
+     // this syscall has existed since Linux 2.4.11 and cannot fail
++#if defined(Q_OS_WASI)
++    return -1;
++#else
+     return syscall(SYS_gettid);
++#endif
+ }
+ #elif defined(Q_OS_DARWIN)
+ #  include <pthread.h>
+diff --git a/src/corelib/global/qsystemdetection.h b/src/corelib/global/qsystemdetection.h
+index 5188104310..c2c5bc736e 100644
+--- a/src/corelib/global/qsystemdetection.h
++++ b/src/corelib/global/qsystemdetection.h
+@@ -127,6 +127,9 @@
+ #elif defined(__HAIKU__)
+ #  define Q_OS_HAIKU
+ #elif defined(__MAKEDEPEND__)
++#elif defined(__wasi__)
++#  define Q_OS_LINUX
++#  define Q_OS_WASI
+ #else
+ #  error "Qt has not been ported to this OS - see http://www.qt-project.org/"
+ #endif
+diff --git a/src/corelib/global/qtenvironmentvariables.cpp b/src/corelib/global/qtenvironmentvariables.cpp
+index 9e2ffe54a9..093106db48 100644
+--- a/src/corelib/global/qtenvironmentvariables.cpp
++++ b/src/corelib/global/qtenvironmentvariables.cpp
+@@ -343,7 +343,9 @@ void qTzSet()
+ #if defined(Q_OS_WIN)
+     _tzset();
+ #else
++#  if !defined(Q_OS_WASI)
+     tzset();
++#  endif // Q_OS_WASI
+ #endif // Q_OS_WIN
+ }
+ 
+@@ -374,7 +376,9 @@ bool qLocalTime(time_t utc, struct tm *local)
+     // thread-safe and doesn't use a shared static data area.
+     // As localtime_r() is not specified to work as if it called tzset(),
+     // make an explicit call.
++#if !defined(Q_OS_WASI)
+     tzset();
++#endif // Q_OS_WASI
+     if (tm *res = localtime_r(&utc, local)) {
+         Q_ASSERT(res == local);
+         Q_UNUSED(res);
+@@ -413,7 +417,11 @@ QString qTzName(int dstIndex)
+ #else
+     {
+         const auto locker = qt_scoped_lock(environmentMutex);
++#if !defined(Q_OS_WASI)
+         const char *const src = tzname[dstIndex];
++#else
++        const char *const src = nullptr;
++#endif
+         ok = src != nullptr;
+         if (ok)
+             memcpy(name, src, std::min(sizeof(name), strlen(src) + 1));
+diff --git a/src/corelib/io/qfilesystemengine_unix.cpp b/src/corelib/io/qfilesystemengine_unix.cpp
+index f343276416..440634f14b 100644
+--- a/src/corelib/io/qfilesystemengine_unix.cpp
++++ b/src/corelib/io/qfilesystemengine_unix.cpp
+@@ -17,7 +17,9 @@
+ # include <QtCore/qstandardpaths.h>
+ #endif // QT_BOOTSTRAPPED
+ 
++#if !defined(Q_OS_WASI)
+ #include <pwd.h>
++#endif
+ #include <stdlib.h> // for realpath()
+ #include <unistd.h>
+ #include <stdio.h>
+@@ -57,8 +59,10 @@ extern "C" NSString *NSTemporaryDirectory();
+ 
+ #if defined(Q_OS_LINUX)
+ #  include <sys/ioctl.h>
+-#  include <sys/sendfile.h>
+-#  include <linux/fs.h>
++#  if !defined(Q_OS_WASI)
++#    include <sys/sendfile.h>
++#    include <linux/fs.h>
++#  endif
+ 
+ // in case linux/fs.h is too old and doesn't define it:
+ #ifndef FICLONE
+@@ -528,6 +532,7 @@ void QFileSystemMetaData::fillFromDirEnt(const QT_DIRENT &entry)
+ 
+     case DT_CHR:
+     case DT_FIFO:
++#if !defined(Q_OS_WASI)
+     case DT_SOCK:
+         // ### System attribute
+         knownFlagsMask = QFileSystemMetaData::LinkType
+@@ -542,6 +547,7 @@ void QFileSystemMetaData::fillFromDirEnt(const QT_DIRENT &entry)
+             | QFileSystemMetaData::ExistsAttribute;
+ 
+         break;
++#endif
+ 
+     case DT_LNK:
+         knownFlagsMask = QFileSystemMetaData::LinkType;
+@@ -677,7 +683,7 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
+         errno = ENOENT;
+     else
+         resolved_name.reset(realpath(entry.nativeFilePath().constData(), stack_result));
+-# else
++# elif !defined(Q_OS_WASI)
+     resolved_name.reset(realpath(entry.nativeFilePath().constData(), stack_result));
+ # endif
+     if (resolved_name) {
+@@ -763,6 +769,10 @@ QByteArray QFileSystemEngine::id(int fd)
+ //static
+ QString QFileSystemEngine::resolveUserName(uint userId)
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(userId)
++    return QString();
++#else
+ #if QT_CONFIG(thread) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && !defined(Q_OS_OPENBSD)
+     long size_max = sysconf(_SC_GETPW_R_SIZE_MAX);
+     if (size_max == -1)
+@@ -784,11 +794,16 @@ QString QFileSystemEngine::resolveUserName(uint userId)
+     Q_UNUSED(userId);
+ #endif
+     return QString();
++#endif
+ }
+ 
+ //static
+ QString QFileSystemEngine::resolveGroupName(uint groupId)
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(groupId)
++    return QString();
++#else
+ #if QT_CONFIG(thread) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && !defined(Q_OS_OPENBSD)
+     long size_max = sysconf(_SC_GETPW_R_SIZE_MAX);
+     if (size_max == -1)
+@@ -823,6 +838,7 @@ QString QFileSystemEngine::resolveGroupName(uint groupId)
+     Q_UNUSED(groupId);
+ #endif
+     return QString();
++#endif
+ }
+ 
+ #if defined(Q_OS_DARWIN)
+@@ -1042,7 +1058,7 @@ bool QFileSystemEngine::cloneFile(int srcfd, int dstfd, const QFileSystemMetaDat
+         return false;
+     }
+ 
+-#if defined(Q_OS_LINUX)
++#if defined(Q_OS_LINUX) && !defined(Q_OS_WASI)
+     // first, try FICLONE (only works on regular files and only on certain fs)
+     if (::ioctl(dstfd, FICLONE, srcfd) == 0)
+         return true;
+@@ -1186,6 +1202,12 @@ bool QFileSystemEngine::createLink(const QFileSystemEntry &source, const QFileSy
+ #ifndef QT_BOOTSTRAPPED
+ static QString freeDesktopTrashLocation(const QString &sourcePath)
+ {
++    QString trash;
++
++#if defined(Q_OS_WASI)
++    Q_UNUSED(sourcePath)
++    return trash;
++#else
+     auto makeTrashDir = [](const QDir &topDir, const QString &trashDir = QString()) {
+         auto ownerPerms = QFileDevice::ReadOwner
+                         | QFileDevice::WriteOwner
+@@ -1201,7 +1223,6 @@ static QString freeDesktopTrashLocation(const QString &sourcePath)
+         return QString();
+     };
+ 
+-    QString trash;
+     const QStorageInfo sourceStorage(sourcePath);
+     const QStorageInfo homeStorage(QDir::home());
+     // We support trashing of files outside the users home partition
+@@ -1275,8 +1296,8 @@ static QString freeDesktopTrashLocation(const QString &sourcePath)
+                      topDir.path().toLocal8Bit().constData());
+         }
+     }
+-
+     return trash;
++#endif
+ }
+ #endif // QT_BOOTSTRAPPED
+ 
+@@ -1503,7 +1524,13 @@ bool QFileSystemEngine::setPermissions(const QFileSystemEntry &entry, QFile::Per
+     Q_CHECK_FILE_NAME(entry, false);
+ 
+     mode_t mode = QtPrivate::toMode_t(permissions);
++#if defined(Q_OS_WASI)
++    Q_UNUSED(entry)
++    Q_UNUSED(mode)
++    bool success = false;
++#else
+     bool success = ::chmod(entry.nativeFilePath().constData(), mode) == 0;
++#endif
+     if (success && data) {
+         data->entryFlags &= ~QFileSystemMetaData::Permissions;
+         data->entryFlags |= QFileSystemMetaData::MetaDataFlag(uint(permissions.toInt()));
+@@ -1519,7 +1546,13 @@ bool QFileSystemEngine::setPermissions(int fd, QFile::Permissions permissions, Q
+ {
+     mode_t mode = QtPrivate::toMode_t(permissions);
+ 
++#if defined(Q_OS_WASI)
++    Q_UNUSED(fd)
++    Q_UNUSED(mode)
++    bool success = false;
++#else
+     bool success = ::fchmod(fd, mode) == 0;
++#endif
+     if (success && data) {
+         data->entryFlags &= ~QFileSystemMetaData::Permissions;
+         data->entryFlags |= QFileSystemMetaData::MetaDataFlag(uint(permissions.toInt()));
+diff --git a/src/corelib/io/qlockfile_unix.cpp b/src/corelib/io/qlockfile_unix.cpp
+index 47aff8b973..7b779ffd98 100644
+--- a/src/corelib/io/qlockfile_unix.cpp
++++ b/src/corelib/io/qlockfile_unix.cpp
+@@ -106,7 +106,7 @@ static qint64 qt_write_loop(int fd, const char *data, qint64 len)
+ 
+ static bool setNativeLocks(int fd)
+ {
+-#if defined(LOCK_EX) && defined(LOCK_NB)
++#if defined(LOCK_EX) && defined(LOCK_NB) && !defined(Q_OS_WASI)
+     if (flock(fd, LOCK_EX | LOCK_NB) == -1) // other threads, and other processes on a local fs
+         return false;
+ #else
+@@ -170,8 +170,10 @@ bool QLockFilePrivate::removeStaleLock()
+ 
+ bool QLockFilePrivate::isProcessRunning(qint64 pid, const QString &appname)
+ {
++#if !defined(Q_OS_WASI)
+     if (::kill(pid_t(pid), 0) == -1 && errno == ESRCH)
+         return false; // PID doesn't exist anymore
++#endif
+ 
+     const QString processName = processNameByPid(pid);
+     if (!processName.isEmpty()) {
+diff --git a/src/corelib/io/qstandardpaths_unix.cpp b/src/corelib/io/qstandardpaths_unix.cpp
+index 64d8a3fa49..618fbb2dcc 100644
+--- a/src/corelib/io/qstandardpaths_unix.cpp
++++ b/src/corelib/io/qstandardpaths_unix.cpp
+@@ -115,7 +115,11 @@ static bool checkXdgRuntimeDir(const QString &xdgRuntimeDir)
+     };
+ 
+     // http://standards.freedesktop.org/basedir-spec/latest/
++#if defined(Q_OS_WASI)
++    const uint myUid = uint(0);
++#else
+     const uint myUid = uint(geteuid());
++#endif
+     const QFile::Permissions wantedPerms = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner;
+     const QFileSystemMetaData::MetaDataFlags statFlags = QFileSystemMetaData::PosixStatFlags
+                                                          | QFileSystemMetaData::LinkType;
+@@ -244,7 +248,12 @@ QString QStandardPaths::writableLocation(StandardLocation type)
+         bool fromEnv = !xdgRuntimeDir.isEmpty();
+         if (xdgRuntimeDir.isEmpty() || !checkXdgRuntimeDir(xdgRuntimeDir)) {
+             // environment variable not set or is set to something unsuitable
++    // http://standards.freedesktop.org/basedir-spec/latest/
++#if defined(Q_OS_WASI)
++            const uint myUid = uint(0);
++#else
+             const uint myUid = uint(geteuid());
++#endif
+             const QString userName = QFileSystemEngine::resolveUserName(myUid);
+             xdgRuntimeDir = QDir::tempPath() + "/runtime-"_L1 + userName;
+ 
+diff --git a/src/corelib/io/qstorageinfo_unix.cpp b/src/corelib/io/qstorageinfo_unix.cpp
+index 20bddd870c..3769724740 100644
+--- a/src/corelib/io/qstorageinfo_unix.cpp
++++ b/src/corelib/io/qstorageinfo_unix.cpp
+@@ -23,9 +23,11 @@
+ #  include <sys/vfs.h>
+ #  include <mntent.h>
+ #elif defined(Q_OS_LINUX) || defined(Q_OS_HURD)
+-#  include <mntent.h>
+-#  include <sys/statvfs.h>
+-#  include <sys/sysmacros.h>
++#  if !defined(Q_OS_WASI)
++#    include <mntent.h>
++#    include <sys/statvfs.h>
++#    include <sys/sysmacros.h>
++#  endif
+ #elif defined(Q_OS_SOLARIS)
+ #  include <sys/mnttab.h>
+ #  include <sys/statvfs.h>
+@@ -112,7 +114,7 @@ private:
+     QByteArray m_fileSystemType;
+     QByteArray m_device;
+     QByteArray m_options;
+-#elif defined(Q_OS_LINUX) || defined(Q_OS_HURD)
++#elif (defined(Q_OS_LINUX) || defined(Q_OS_HURD)) && !defined(Q_OS_WASI)
+     struct mountinfoent : public mntent {
+         // Details from proc(5) section from /proc/<pid>/mountinfo:
+         //(1)  mount ID: a unique ID for the mount (may be reused after umount(2)).
+@@ -355,6 +357,7 @@ inline QByteArray QStorageIterator::subvolume() const
+ static const int bufferSize = 1024; // 2 paths (mount point+device) and metainfo;
+                                     // should be enough
+ 
++#if !defined(Q_OS_WASI)
+ inline QStorageIterator::QStorageIterator() :
+     buffer(QByteArray(bufferSize, 0))
+ {
+@@ -371,7 +374,11 @@ inline QStorageIterator::QStorageIterator() :
+         fp = ::setmntent(_PATH_MOUNTED, "r");
+     }
+ }
++#else
++inline QStorageIterator::QStorageIterator() {}
++#endif
+ 
++#if !defined(Q_OS_WASI)
+ inline QStorageIterator::~QStorageIterator()
+ {
+     if (fp) {
+@@ -381,14 +388,24 @@ inline QStorageIterator::~QStorageIterator()
+             ::endmntent(fp);
+     }
+ }
++#else
++inline QStorageIterator::~QStorageIterator() {}
++#endif
+ 
+ inline bool QStorageIterator::isValid() const
+ {
++#if defined(Q_OS_WASI)
++    return false;
++#else
+     return fp != nullptr;
++#endif
+ }
+ 
+ inline bool QStorageIterator::next()
+ {
++#if defined(Q_OS_WASI)
++    return false;
++#else
+     mnt.subvolume = nullptr;
+     mnt.superopts = nullptr;
+     if (!usingMountinfo)
+@@ -526,20 +543,32 @@ inline bool QStorageIterator::next()
+     *ptr = '\0';
+ 
+     return true;
++#endif
+ }
+ 
+ inline QString QStorageIterator::rootPath() const
+ {
++#if defined(Q_OS_WASI)
++    return QByteArray();
++#else
+     return QFile::decodeName(mnt.mnt_dir);
++#endif
+ }
+ 
+ inline QByteArray QStorageIterator::fileSystemType() const
+ {
++#if defined(Q_OS_WASI)
++    return QByteArray();
++#else
+     return QByteArray(mnt.mnt_type);
++#endif
+ }
+ 
+ inline QByteArray QStorageIterator::device() const
+ {
++#if defined(Q_OS_WASI)
++    return QByteArray();
++#else
+ #ifdef Q_OS_LINUX
+     // check that the device exists
+     if (mnt.mnt_fsname[0] == '/' && access(mnt.mnt_fsname, F_OK) != 0) {
+@@ -558,10 +587,14 @@ inline QByteArray QStorageIterator::device() const
+     }
+ #endif
+     return QByteArray(mnt.mnt_fsname);
++#endif
+ }
+ 
+ inline QByteArray QStorageIterator::options() const
+ {
++#if defined(Q_OS_WASI)
++    return QByteArray();
++#else
+     // Merge the two options, starting with the superblock options and letting
+     // the per-mount options override.
+     const char *superopts = mnt.superopts;
+@@ -578,11 +611,16 @@ inline QByteArray QStorageIterator::options() const
+     if (superopts)
+         return QByteArray(superopts) + ',' + mnt.mnt_opts;
+     return QByteArray(mnt.mnt_opts);
++#endif
+ }
+ 
+ inline QByteArray QStorageIterator::subvolume() const
+ {
++#if defined(Q_OS_WASI)
++    return QByteArray();
++#else
+     return QByteArray(mnt.subvolume);
++#endif
+ }
+ #elif defined(Q_OS_HAIKU)
+ inline QStorageIterator::QStorageIterator()
+@@ -802,6 +840,7 @@ void QStorageInfoPrivate::doStat()
+ 
+ void QStorageInfoPrivate::retrieveVolumeInfo()
+ {
++#if !defined(Q_OS_WASI)
+     QT_STATFSBUF statfs_buf;
+     int result;
+     EINTR_LOOP(result, QT_STATFS(QFile::encodeName(rootPath).constData(), &statfs_buf));
+@@ -827,6 +866,7 @@ void QStorageInfoPrivate::retrieveVolumeInfo()
+         readOnly = (statfs_buf.f_flag & ST_RDONLY) != 0;
+ #endif
+     }
++#endif
+ }
+ 
+ QList<QStorageInfo> QStorageInfoPrivate::mountedVolumes()
+diff --git a/src/corelib/io/qtemporaryfile.cpp b/src/corelib/io/qtemporaryfile.cpp
+index 80ea57fb92..5aa4003ad9 100644
+--- a/src/corelib/io/qtemporaryfile.cpp
++++ b/src/corelib/io/qtemporaryfile.cpp
+@@ -210,7 +210,11 @@ static bool createFileFromTemplate(NativeFileHandle &file, QTemporaryFileName &t
+ #else // POSIX
+         Q_UNUSED(flags);
+         file = QT_OPEN(path.constData(),
++#if defined(Q_OS_WASI)
++                QT_OPEN_CREAT | QT_OPEN_EXCL | QT_OPEN_RDWR,
++#else
+                 QT_OPEN_CREAT | QT_OPEN_EXCL | QT_OPEN_RDWR | QT_OPEN_LARGEFILE,
++#endif
+                 static_cast<mode_t>(mode));
+ 
+         if (file != -1)
+diff --git a/src/corelib/kernel/qcore_unix_p.h b/src/corelib/kernel/qcore_unix_p.h
+index ed64a5d86b..94beafec9b 100644
+--- a/src/corelib/kernel/qcore_unix_p.h
++++ b/src/corelib/kernel/qcore_unix_p.h
+@@ -40,7 +40,9 @@
+ #endif
+ 
+ #include <chrono>
++#if !defined(Q_OS_WASI)
+ #include <sys/wait.h>
++#endif
+ #include <errno.h>
+ #include <fcntl.h>
+ 
+@@ -192,11 +194,14 @@ inline void qt_ignore_sigpipe()
+         // More than one thread could turn off SIGPIPE at the same time
+         // But that's acceptable because they all would be doing the same
+         // action
++#if defined(Q_OS_WASI)
++#else
+         struct sigaction noaction;
+         memset(&noaction, 0, sizeof(noaction));
+         noaction.sa_handler = SIG_IGN;
+         ::sigaction(SIGPIPE, &noaction, nullptr);
+         atom.storeRelaxed(1);
++#endif
+     }
+ }
+ 
+@@ -233,8 +238,14 @@ static inline int qt_safe_open(const char *pathname, int flags, mode_t mode = 07
+ // call qt_safe_pipe
+ static inline int qt_safe_pipe(int pipefd[2], int flags = 0)
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(pipefd)
++#endif
+     Q_ASSERT((flags & ~O_NONBLOCK) == 0);
+ 
++#if defined(Q_OS_WASI)
++    return 0;
++#else
+ #ifdef QT_THREADSAFE_CLOEXEC
+     // use pipe2
+     flags |= O_CLOEXEC;
+@@ -255,6 +266,7 @@ static inline int qt_safe_pipe(int pipefd[2], int flags = 0)
+ 
+     return 0;
+ #endif
++#endif // Q_OS_WASI
+ }
+ 
+ #endif // Q_OS_VXWORKS
+@@ -262,6 +274,10 @@ static inline int qt_safe_pipe(int pipefd[2], int flags = 0)
+ // don't call dup or fcntl(F_DUPFD)
+ static inline int qt_safe_dup(int oldfd, int atleast = 0, int flags = FD_CLOEXEC)
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(oldfd)
++    Q_UNUSED(atleast)
++#endif
+     Q_ASSERT(flags == FD_CLOEXEC || flags == 0);
+ 
+ #ifdef F_DUPFD_CLOEXEC
+@@ -271,7 +287,11 @@ static inline int qt_safe_dup(int oldfd, int atleast = 0, int flags = FD_CLOEXEC
+     return ::fcntl(oldfd, cmd, atleast);
+ #else
+     // use F_DUPFD
++#if defined(Q_OS_WASI)
++    int ret = -1;
++#else
+     int ret = ::fcntl(oldfd, F_DUPFD, atleast);
++#endif
+ 
+     if (flags && ret != -1)
+         ::fcntl(ret, F_SETFD, flags);
+@@ -283,8 +303,15 @@ static inline int qt_safe_dup(int oldfd, int atleast = 0, int flags = FD_CLOEXEC
+ // call qt_safe_dup2
+ static inline int qt_safe_dup2(int oldfd, int newfd, int flags = FD_CLOEXEC)
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(oldfd)
++    Q_UNUSED(newfd)
++#endif
+     Q_ASSERT(flags == FD_CLOEXEC || flags == 0);
+ 
++#if defined(Q_OS_WASI)
++    return -1;
++#else
+     int ret;
+ #ifdef QT_THREADSAFE_CLOEXEC
+     // use dup3
+@@ -299,6 +326,7 @@ static inline int qt_safe_dup2(int oldfd, int newfd, int flags = FD_CLOEXEC)
+         ::fcntl(newfd, F_SETFD, flags);
+     return 0;
+ #endif
++#endif
+ }
+ 
+ static inline qint64 qt_safe_read(int fd, void *data, qint64 maxlen)
+@@ -339,30 +367,56 @@ static inline int qt_safe_close(int fd)
+ static inline int qt_safe_execve(const char *filename, char *const argv[],
+                                  char *const envp[])
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(filename)
++    Q_UNUSED(argv)
++    Q_UNUSED(envp)
++    return -1;
++#else
+     int ret;
+     EINTR_LOOP(ret, ::execve(filename, argv, envp));
+     return ret;
++#endif
+ }
+ 
+ static inline int qt_safe_execv(const char *path, char *const argv[])
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(path)
++    Q_UNUSED(argv)
++    return -1;
++#else
+     int ret;
+     EINTR_LOOP(ret, ::execv(path, argv));
+     return ret;
++#endif
+ }
+ 
+ static inline int qt_safe_execvp(const char *file, char *const argv[])
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(file)
++    Q_UNUSED(argv)
++    return -1;
++#else
+     int ret;
+     EINTR_LOOP(ret, ::execvp(file, argv));
+     return ret;
++#endif
+ }
+ 
+ static inline pid_t qt_safe_waitpid(pid_t pid, int *status, int options)
+ {
++#if defined(Q_OS_WASI)
++    Q_UNUSED(pid)
++    Q_UNUSED(status)
++    Q_UNUSED(options)
++    return -1;
++#else
+     int ret;
+     EINTR_LOOP(ret, ::waitpid(pid, status, options));
+     return ret;
++#endif
+ }
+ #endif // QT_CONFIG(process)
+ 
+diff --git a/src/corelib/kernel/qcoreapplication.cpp b/src/corelib/kernel/qcoreapplication.cpp
+index a80efbb562..a7fe7e1bf8 100644
+--- a/src/corelib/kernel/qcoreapplication.cpp
++++ b/src/corelib/kernel/qcoreapplication.cpp
+@@ -448,7 +448,7 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv)
+ #ifndef QT_NO_QOBJECT
+     QCoreApplicationPrivate::is_app_closing = false;
+ 
+-#  if defined(Q_OS_UNIX)
++#  if defined(Q_OS_UNIX) && !defined(Q_OS_WASI)
+     if (Q_UNLIKELY(!setuidAllowed && (geteuid() != getuid())))
+         qFatal("FATAL: The application binary appears to be running setuid, this is a security hole.");
+ #  endif // Q_OS_UNIX
+diff --git a/src/corelib/kernel/qeventdispatcher_unix.cpp b/src/corelib/kernel/qeventdispatcher_unix.cpp
+index c75b59acfe..77db4e5a97 100644
+--- a/src/corelib/kernel/qeventdispatcher_unix.cpp
++++ b/src/corelib/kernel/qeventdispatcher_unix.cpp
+@@ -230,9 +230,12 @@ void QEventDispatcherUNIXPrivate::markPendingSocketNotifiers()
+         } notifiers[] = {
+             { QSocketNotifier::Read,      POLLIN  | POLLHUP | POLLERR },
+             { QSocketNotifier::Write,     POLLOUT | POLLHUP | POLLERR },
++#if !defined(Q_OS_WASI)
+             { QSocketNotifier::Exception, POLLPRI | POLLHUP | POLLERR }
++#endif
+         };
+ 
++#if !defined(Q_OS_WASI)
+         for (const auto &n : notifiers) {
+             QSocketNotifier *notifier = sn_set.notifiers[n.type];
+ 
+@@ -248,6 +251,7 @@ void QEventDispatcherUNIXPrivate::markPendingSocketNotifiers()
+             if (pfd.revents & n.flags)
+                 setSocketNotifierPending(notifier);
+         }
++#endif
+     }
+ 
+     pollfds.clear();
+diff --git a/src/corelib/kernel/qeventdispatcher_unix_p.h b/src/corelib/kernel/qeventdispatcher_unix_p.h
+index 4e9a360f3e..f491ce22d1 100644
+--- a/src/corelib/kernel/qeventdispatcher_unix_p.h
++++ b/src/corelib/kernel/qeventdispatcher_unix_p.h
+@@ -132,11 +132,13 @@ inline short QSocketNotifierSetUNIX::events() const noexcept
+     if (notifiers[0])
+         result |= POLLIN;
+ 
++#if !defined(Q_OS_WASI)
+     if (notifiers[1])
+         result |= POLLOUT;
+ 
+     if (notifiers[2])
+         result |= POLLPRI;
++#endif
+ 
+     return result;
+ }
+diff --git a/src/corelib/text/qregularexpression.cpp b/src/corelib/text/qregularexpression.cpp
+index 93e4f7d1f9..c0bef1020a 100644
+--- a/src/corelib/text/qregularexpression.cpp
++++ b/src/corelib/text/qregularexpression.cpp
+@@ -954,7 +954,11 @@ struct PcreJitStackFree
+             pcre2_jit_stack_free_16(stack);
+     }
+ };
++#if !defined(Q_OS_WASI)
+ Q_CONSTINIT static thread_local std::unique_ptr<pcre2_jit_stack_16, PcreJitStackFree> jitStacks;
++#else
++Q_CONSTINIT static std::unique_ptr<pcre2_jit_stack_16, PcreJitStackFree> jitStacks;
++#endif
+ }
+ 
+ /*!
+diff --git a/src/corelib/thread/qthread_unix.cpp b/src/corelib/thread/qthread_unix.cpp
+index dee71305cc..614bf6605c 100644
+--- a/src/corelib/thread/qthread_unix.cpp
++++ b/src/corelib/thread/qthread_unix.cpp
+@@ -52,7 +52,7 @@
+ #include <sys/pstat.h>
+ #endif
+ 
+-#if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
++#if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE) && !defined(Q_OS_WASI)
+ #include <sys/prctl.h>
+ #endif
+ 
+diff --git a/src/gui/CMakeLists.txt b/src/gui/CMakeLists.txt
+index 192f163ec3..fab5bd95b6 100644
+--- a/src/gui/CMakeLists.txt
++++ b/src/gui/CMakeLists.txt
+@@ -40,7 +40,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}
+ endif()
+ 
+ # Silence AUTOMOC warning 'No relevant classes found. No output generated.'
+-if (NOT UNIX)
++if (NOT (UNIX OR WASI))
+     set_source_files_properties(kernel/qplatformwindow_p.h
+                                 PROPERTIES SKIP_AUTOMOC TRUE)
+ endif()
+@@ -292,7 +292,7 @@ set(qpdf_resource_files
+     "painting/qpdfa_metadata.xml"
+ )
+ 
+-if(WIN32 OR (UNIX AND NOT APPLE))
++if(WIN32 OR ((UNIX OR WASI) AND NOT APPLE))
+     set_target_properties(Gui PROPERTIES UNITY_BUILD OFF) # X11 define clashes/Windows oddities.
+ endif()
+ 
+@@ -692,12 +692,12 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_freetype
+         WrapFreetype::WrapFreetype
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION UNIX AND NOT APPLE
++qt_internal_extend_target(Gui CONDITION (UNIX OR WASI) AND NOT APPLE
+     SOURCES
+         text/unix/qgenericunixfontdatabase_p.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION QT_FEATURE_fontconfig AND QT_FEATURE_freetype AND UNIX AND NOT APPLE
++qt_internal_extend_target(Gui CONDITION QT_FEATURE_fontconfig AND QT_FEATURE_freetype AND (UNIX OR WASI) AND NOT APPLE
+     SOURCES
+         text/unix/qfontconfigdatabase.cpp text/unix/qfontconfigdatabase_p.h
+         text/unix/qfontenginemultifontconfig.cpp text/unix/qfontenginemultifontconfig_p.h
+@@ -749,7 +749,7 @@ qt_internal_extend_target(Gui CONDITION MINGW AND WIN32
+ # Only enable the Pixman draw-helpers on platforms that support the GAS syntax of their asm files
+ # Note: These helpers are only used for 16-bit surfaces, so excluding them does not generally
+ # exclude neon-drawhelpers on these platforms.
+-if(UNIX AND NOT ANDROID AND NOT INTEGRITY AND NOT (TEST_architecture_arch STREQUAL "arm64") AND NOT UIKIT AND NOT QT_IS_MACOS_UNIVERSAL)
++if((UNIX OR WASI) AND NOT ANDROID AND NOT INTEGRITY AND NOT (TEST_architecture_arch STREQUAL "arm64") AND NOT UIKIT AND NOT QT_IS_MACOS_UNIVERSAL)
+     qt_internal_extend_target(Gui DEFINES ENABLE_PIXMAN_DRAWHELPERS)
+     qt_internal_add_simd_part(Gui SIMD neon
+         SOURCES
+@@ -903,7 +903,7 @@ qt_internal_extend_target(Gui CONDITION WASM
+         platform/wasm/qwasmlocalfileaccess.cpp platform/wasm/qwasmlocalfileaccess_p.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION UNIX
++qt_internal_extend_target(Gui CONDITION (UNIX OR WASI)
+     SOURCES
+         platform/unix/qgenericunixeventdispatcher.cpp platform/unix/qgenericunixeventdispatcher_p.h
+         platform/unix/qunixeventdispatcher.cpp
+@@ -911,34 +911,34 @@ qt_internal_extend_target(Gui CONDITION UNIX
+         platform/unix/qunixnativeinterface.cpp
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION QT_FEATURE_glib AND UNIX
++qt_internal_extend_target(Gui CONDITION QT_FEATURE_glib AND (UNIX OR WASI)
+     SOURCES
+         platform/unix/qeventdispatcher_glib.cpp platform/unix/qeventdispatcher_glib_p.h
+     LIBRARIES
+         GLIB2::GLIB2
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb OR NOT UIKIT)
++qt_internal_extend_target(Gui CONDITION (UNIX OR WASI) AND (QT_FEATURE_xcb OR NOT UIKIT)
+     SOURCES
+         platform/unix/qgenericunixservices.cpp platform/unix/qgenericunixservices_p.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb)
++qt_internal_extend_target(Gui CONDITION (UNIX OR WASI) AND (QT_FEATURE_xcb)
+     SOURCES
+         platform/unix/qtx11extras.cpp platform/unix/qtx11extras_p.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND UNIX AND (QT_FEATURE_xcb OR NOT UIKIT)
++qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND (UNIX OR WASI) AND (QT_FEATURE_xcb OR NOT UIKIT)
+     LIBRARIES
+         Qt::DBus
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION UNIX AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
++qt_internal_extend_target(Gui CONDITION (UNIX OR WASI) AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
+     SOURCES
+         platform/unix/qgenericunixthemes.cpp platform/unix/qgenericunixthemes_p.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND UNIX AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
++qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND (UNIX OR WASI) AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
+     SOURCES
+         platform/unix/dbusmenu/qdbusmenuadaptor.cpp platform/unix/dbusmenu/qdbusmenuadaptor_p.h
+         platform/unix/dbusmenu/qdbusmenubar.cpp platform/unix/dbusmenu/qdbusmenubar_p.h
+@@ -948,7 +948,7 @@ qt_internal_extend_target(Gui CONDITION TARGET Qt::DBus AND UNIX AND (QT_FEATURE
+         platform/unix/dbusmenu/qdbusplatformmenu.cpp platform/unix/dbusmenu/qdbusplatformmenu_p.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION QT_FEATURE_systemtrayicon AND TARGET Qt::DBus AND UNIX AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
++qt_internal_extend_target(Gui CONDITION QT_FEATURE_systemtrayicon AND TARGET Qt::DBus AND (UNIX OR WASI) AND (QT_FEATURE_xcb OR NOT MACOS) AND (QT_FEATURE_xcb OR NOT UIKIT)
+     SOURCES
+         platform/unix/dbustray/qdbustrayicon.cpp platform/unix/dbustray/qdbustrayicon_p.h
+         platform/unix/dbustray/qdbustraytypes.cpp platform/unix/dbustray/qdbustraytypes_p.h
+@@ -956,7 +956,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_systemtrayicon AND TARGET Qt:
+         platform/unix/dbustray/qxdgnotificationproxy.cpp platform/unix/dbustray/qxdgnotificationproxy_p.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION QT_FEATURE_xkbcommon AND UNIX
++qt_internal_extend_target(Gui CONDITION QT_FEATURE_xkbcommon AND (UNIX OR WASI)
+     SOURCES
+         platform/unix/qxkbcommon.cpp platform/unix/qxkbcommon_p.h
+         platform/unix/qxkbcommon_3rdparty.cpp
+diff --git a/src/gui/image/qpnghandler.cpp b/src/gui/image/qpnghandler.cpp
+index c9b12c15f8..a9bb61288d 100644
+--- a/src/gui/image/qpnghandler.cpp
++++ b/src/gui/image/qpnghandler.cpp
+@@ -33,6 +33,7 @@
+     To work around this we override the png_jmpbuf macro to cast
+     longjmp to a png_longjmp_ptr.
+ */
++#if !defined(Q_OS_WASI)
+ #   undef png_jmpbuf
+ #   ifdef PNG_SETJMP_SUPPORTED
+ #       define png_jmpbuf(png_ptr) \
+@@ -42,6 +43,7 @@
+             (LIBPNG_WAS_COMPILED_WITH__PNG_NO_SETJMP)
+ #   endif
+ #endif
++#endif
+ 
+ QT_BEGIN_NAMESPACE
+ 
+@@ -532,11 +534,13 @@ bool QPngHandlerPrivate::readPngHeader()
+         return false;
+     }
+ 
++#if !defined(Q_OS_WASI)
+     if (setjmp(png_jmpbuf(png_ptr))) {
+         png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
+         png_ptr = nullptr;
+         return false;
+     }
++#endif
+ 
+     png_set_read_fn(png_ptr, this, iod_read_fn);
+     png_read_info(png_ptr, info_ptr);
+@@ -616,6 +620,7 @@ bool QPngHandlerPrivate::readPngImage(QImage *outImage)
+         return false;
+     }
+ 
++#if !defined(Q_OS_WASI)
+     if (setjmp(png_jmpbuf(png_ptr))) {
+         png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
+         png_ptr = nullptr;
+@@ -623,6 +628,7 @@ bool QPngHandlerPrivate::readPngImage(QImage *outImage)
+         state = Error;
+         return false;
+     }
++#endif
+ 
+     if (gamma != 0.0 && fileGamma != 0.0) {
+         // This configuration forces gamma correction and
+@@ -872,10 +878,12 @@ bool QPNGImageWriter::writeImage(const QImage& image, int compression_in, const
+         return false;
+     }
+ 
++#if !defined(Q_OS_WASI)
+     if (setjmp(png_jmpbuf(png_ptr))) {
+         png_destroy_write_struct(&png_ptr, &info_ptr);
+         return false;
+     }
++#endif
+ 
+     int compression = compression_in;
+     if (compression >= 0) {
+diff --git a/src/gui/kernel/qguiapplication.cpp b/src/gui/kernel/qguiapplication.cpp
+index 690a6f2412..b544e08be6 100644
+--- a/src/gui/kernel/qguiapplication.cpp
++++ b/src/gui/kernel/qguiapplication.cpp
+@@ -1472,7 +1472,11 @@ void QGuiApplicationPrivate::createPlatformIntegration()
+ #endif
+ 
+     bool platformExplicitlySelected = false;
++#if defined(Q_OS_WASI)
++    QByteArray platformNameEnv = "offscreen";
++#else
+     QByteArray platformNameEnv = qgetenv("QT_QPA_PLATFORM");
++#endif
+     if (!platformNameEnv.isEmpty()) {
+         platformName = platformNameEnv;
+         platformExplicitlySelected = true;
+diff --git a/src/gui/painting/qgrayraster.c b/src/gui/painting/qgrayraster.c
+index 3c222c49e1..2c557452b9 100644
+--- a/src/gui/painting/qgrayraster.c
++++ b/src/gui/painting/qgrayraster.c
+@@ -89,6 +89,8 @@
+   /* parameter of the QT_FT_TRACE() and QT_FT_ERROR() macros, used to print/log  */
+   /* messages during execution.                                            */
+   /*                                                                       */
++#include <QtCore/qglobal.h>
++  
+ #undef  QT_FT_COMPONENT
+ #define QT_FT_COMPONENT  trace_smooth
+ 
+@@ -121,16 +123,20 @@
+ #  include <vxWorksCommon.h>    /* needed for setjmp.h */
+ #endif
+ #include <string.h>             /* for qt_ft_memcpy() */
++#if !defined(Q_OS_WASI)
+ #include <setjmp.h>
++#endif
+ #include <limits.h>
+ 
+ #define QT_FT_UINT_MAX  UINT_MAX
+ 
+ #define qt_ft_memset   memset
+ 
++#if !defined(Q_OS_WASI)
+ #define qt_ft_setjmp   setjmp
+ #define qt_ft_longjmp  longjmp
+ #define qt_ft_jmp_buf  jmp_buf
++#endif
+ 
+ #include <stddef.h>
+ typedef ptrdiff_t  QT_FT_PtrDist;
+@@ -274,7 +280,9 @@ QT_FT_END_STMNT
+     int  band_size;
+     int  band_shoot;
+ 
++#if !defined(Q_OS_WASI)
+     qt_ft_jmp_buf  jump_buffer;
++#endif
+ 
+     void*       buffer;
+     long        buffer_size;
+@@ -396,8 +404,10 @@ QT_FT_END_STMNT
+       pcell = &cell->next;
+     }
+ 
++#if !defined(Q_OS_WASI)
+     if ( ras.num_cells >= ras.max_cells )
+       qt_ft_longjmp( ras.jump_buffer, 1 );
++#endif
+ 
+     cell        = ras.cells + ras.num_cells++;
+     cell->x     = x;
+@@ -1626,16 +1636,20 @@ QT_FT_END_STMNT
+   {
+     volatile int  error = 0;
+ 
++#if !defined(Q_OS_WASI)
+     if ( qt_ft_setjmp( ras.jump_buffer ) == 0 )
++#endif
+     {
+       error = QT_FT_Outline_Decompose( &ras.outline, &ras );
+       if ( !ras.invalid )
+         gray_record_cell( RAS_VAR );
+     }
++#if !defined(Q_OS_WASI)
+     else
+     {
+       error = ErrRaster_Memory_Overflow;
+     }
++#endif
+ 
+     return error;
+   }
+diff --git a/src/network/CMakeLists.txt b/src/network/CMakeLists.txt
+index f1eb9fe5f7..c3492bfec6 100644
+--- a/src/network/CMakeLists.txt
++++ b/src/network/CMakeLists.txt
+@@ -169,19 +169,19 @@ qt_internal_extend_target(Network CONDITION QT_FEATURE_dnslookup
+         kernel/qdnslookup.cpp kernel/qdnslookup.h kernel/qdnslookup_p.h
+ )
+ 
+-qt_internal_extend_target(Network CONDITION UNIX
++qt_internal_extend_target(Network CONDITION (UNIX OR WASI)
+     SOURCES
+         kernel/qhostinfo_unix.cpp
+         socket/qnativesocketengine_unix.cpp
+         socket/qnet_unix_p.h
+ )
+ 
+-qt_internal_extend_target(Network CONDITION QT_FEATURE_linux_netlink AND UNIX
++qt_internal_extend_target(Network CONDITION QT_FEATURE_linux_netlink AND (UNIX OR WASI)
+     SOURCES
+         kernel/qnetworkinterface_linux.cpp
+ )
+ 
+-qt_internal_extend_target(Network CONDITION UNIX AND NOT QT_FEATURE_linux_netlink
++qt_internal_extend_target(Network CONDITION (UNIX OR WASI) AND NOT QT_FEATURE_linux_netlink
+     SOURCES
+         kernel/qnetworkinterface_unix.cpp
+ )
+@@ -262,7 +262,7 @@ qt_internal_extend_target(Network CONDITION APPLE
+         kernel/qnetworkproxy_darwin.cpp
+ )
+ 
+-qt_internal_extend_target(Network CONDITION QT_FEATURE_libproxy AND UNIX AND NOT MACOS
++qt_internal_extend_target(Network CONDITION QT_FEATURE_libproxy AND (UNIX OR WASI) AND NOT MACOS
+     SOURCES
+         kernel/qnetworkproxy_libproxy.cpp
+     LIBRARIES
+@@ -275,7 +275,7 @@ qt_internal_extend_target(Network CONDITION ANDROID
+         kernel/qnetworkproxy_android.cpp
+ )
+ 
+-qt_internal_extend_target(Network CONDITION UNIX AND NOT ANDROID AND NOT APPLE AND NOT QT_FEATURE_libproxy AND (UNIX OR WINRT)
++qt_internal_extend_target(Network CONDITION (UNIX OR WASI) AND NOT ANDROID AND NOT APPLE AND NOT QT_FEATURE_libproxy AND ((UNIX OR WASI) OR WINRT)
+     SOURCES
+         kernel/qnetworkproxy_generic.cpp
+ )
+@@ -316,7 +316,7 @@ qt_internal_extend_target(Network CONDITION INTEGRITY AND QT_FEATURE_localserver
+         QT_LOCALSOCKET_TCP
+ )
+ 
+-qt_internal_extend_target(Network CONDITION QT_FEATURE_localserver AND UNIX AND NOT INTEGRITY
++qt_internal_extend_target(Network CONDITION QT_FEATURE_localserver AND (UNIX OR WASI) AND NOT INTEGRITY
+     SOURCES
+         socket/qlocalserver_unix.cpp
+         socket/qlocalsocket_unix.cpp
+diff --git a/src/plugins/platforminputcontexts/CMakeLists.txt b/src/plugins/platforminputcontexts/CMakeLists.txt
+index 78b3ec99d9..2b9762af2f 100644
+--- a/src/plugins/platforminputcontexts/CMakeLists.txt
++++ b/src/plugins/platforminputcontexts/CMakeLists.txt
+@@ -4,6 +4,6 @@
+ if(QT_FEATURE_xkbcommon)
+     add_subdirectory(compose)
+ endif()
+-if(QT_FEATURE_xkbcommon AND TARGET Qt::DBus AND UNIX AND NOT MACOS)
++if(QT_FEATURE_xkbcommon AND TARGET Qt::DBus AND (UNIX OR WASI) AND NOT MACOS)
+     add_subdirectory(ibus)
+ endif()
+diff --git a/src/plugins/platformthemes/CMakeLists.txt b/src/plugins/platformthemes/CMakeLists.txt
+index e5abcd1a11..d2a7f51391 100644
+--- a/src/plugins/platformthemes/CMakeLists.txt
++++ b/src/plugins/platformthemes/CMakeLists.txt
+@@ -2,7 +2,7 @@
+ # SPDX-License-Identifier: BSD-3-Clause
+ 
+ 
+-if(QT_FEATURE_dbus AND QT_FEATURE_mimetype AND QT_FEATURE_regularexpression AND UNIX AND NOT APPLE)
++if(QT_FEATURE_dbus AND QT_FEATURE_mimetype AND QT_FEATURE_regularexpression AND (UNIX OR WASI) AND NOT APPLE)
+     add_subdirectory(xdgdesktopportal)
+ endif()
+ if(QT_FEATURE_gtk3 AND TARGET Qt::Widgets)
+diff --git a/src/plugins/printsupport/CMakeLists.txt b/src/plugins/printsupport/CMakeLists.txt
+index 7736684762..90f601164b 100644
+--- a/src/plugins/printsupport/CMakeLists.txt
++++ b/src/plugins/printsupport/CMakeLists.txt
+@@ -1,6 +1,6 @@
+ # Copyright (C) 2022 The Qt Company Ltd.
+ # SPDX-License-Identifier: BSD-3-Clause
+ 
+-if(QT_FEATURE_cups AND UNIX AND NOT APPLE)
++if(QT_FEATURE_cups AND (UNIX OR WASI) AND NOT APPLE)
+     add_subdirectory(cups)
+ endif()
+diff --git a/src/plugins/sqldrivers/odbc/CMakeLists.txt b/src/plugins/sqldrivers/odbc/CMakeLists.txt
+index df091f9687..2c6da3c842 100644
+--- a/src/plugins/sqldrivers/odbc/CMakeLists.txt
++++ b/src/plugins/sqldrivers/odbc/CMakeLists.txt
+@@ -26,7 +26,7 @@ qt_internal_add_plugin(QODBCDriverPlugin
+ ## Scopes:
+ #####################################################################
+ 
+-qt_internal_extend_target(QODBCDriverPlugin CONDITION UNIX
++qt_internal_extend_target(QODBCDriverPlugin CONDITION (UNIX OR WASI)
+     DEFINES
+         UNICODE
+ )
+diff --git a/src/plugins/sqldrivers/sqlite/CMakeLists.txt b/src/plugins/sqldrivers/sqlite/CMakeLists.txt
+index add9dff9fd..44b50f6cb1 100644
+--- a/src/plugins/sqldrivers/sqlite/CMakeLists.txt
++++ b/src/plugins/sqldrivers/sqlite/CMakeLists.txt
+@@ -75,7 +75,7 @@ qt_internal_extend_target(QSQLiteDriverPlugin CONDITION QNX AND NOT QT_FEATURE_s
+         _QNX_SOURCE
+ )
+ 
+-qt_internal_extend_target(QSQLiteDriverPlugin CONDITION UNIX AND NOT QT_FEATURE_system_sqlite
++qt_internal_extend_target(QSQLiteDriverPlugin CONDITION (UNIX OR WASI) AND NOT QT_FEATURE_system_sqlite
+     DEFINES
+         HAVE_USLEEP=1
+ )
+diff --git a/src/printsupport/CMakeLists.txt b/src/printsupport/CMakeLists.txt
+index 1ff5fd552f..aaa78e2593 100644
+--- a/src/printsupport/CMakeLists.txt
++++ b/src/printsupport/CMakeLists.txt
+@@ -83,12 +83,12 @@ qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printpreviewwidget
+         widgets/qprintpreviewwidget.cpp widgets/qprintpreviewwidget.h
+ )
+ 
+-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cups AND UNIX AND NOT APPLE
++qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cups AND (UNIX OR WASI) AND NOT APPLE
+     SOURCES
+         kernel/qcups.cpp kernel/qcups_p.h
+ )
+ 
+-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cupsjobwidget AND UNIX AND NOT APPLE
++qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_cupsjobwidget AND (UNIX OR WASI) AND NOT APPLE
+     SOURCES
+         widgets/qcupsjobwidget.cpp widgets/qcupsjobwidget.ui widgets/qcupsjobwidget_p.h
+     ENABLE_AUTOGEN_TOOLS
+@@ -177,7 +177,7 @@ qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printdialog AND WIN3
+         dialogs/qprintdialog_win.cpp
+ )
+ 
+-qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printdialog AND UNIX AND NOT APPLE
++qt_internal_extend_target(PrintSupport CONDITION QT_FEATURE_printdialog AND (UNIX OR WASI) AND NOT APPLE
+     SOURCES
+         dialogs/qpagesetupdialog_unix.cpp dialogs/qpagesetupdialog_unix_p.h
+         dialogs/qprintdialog_unix.cpp
+diff --git a/src/tools/bootstrap/CMakeLists.txt b/src/tools/bootstrap/CMakeLists.txt
+index e065fdf2cb..752b5d00e4 100644
+--- a/src/tools/bootstrap/CMakeLists.txt
++++ b/src/tools/bootstrap/CMakeLists.txt
+@@ -114,7 +114,7 @@ qt_internal_extend_target(Bootstrap
+ ## Scopes:
+ #####################################################################
+ 
+-qt_internal_extend_target(Bootstrap CONDITION UNIX
++qt_internal_extend_target(Bootstrap CONDITION (UNIX OR WASI)
+     SOURCES
+         ../../corelib/io/qfilesystemengine_unix.cpp
+         ../../corelib/io/qfilesystemiterator_unix.cpp
+@@ -163,7 +163,7 @@ qt_internal_extend_target(Bootstrap CONDITION UIKIT
+         ${FWUIKit}
+ )
+ 
+-qt_internal_extend_target(Bootstrap CONDITION UNIX AND NOT MACOS
++qt_internal_extend_target(Bootstrap CONDITION (UNIX OR WASI) AND NOT MACOS
+     SOURCES
+         ../../corelib/io/qstandardpaths_unix.cpp
+ )
+diff --git a/tests/auto/cmake/CMakeLists.txt b/tests/auto/cmake/CMakeLists.txt
+index 975cc6fc7d..87b7e3f080 100644
+--- a/tests/auto/cmake/CMakeLists.txt
++++ b/tests/auto/cmake/CMakeLists.txt
+@@ -69,7 +69,7 @@ enable_testing()
+ # flag. Notably -rpath is specified which should implicitly enable -rpath-link, but that
+ # doesn't seem to be the case.
+ # Until this is figured out, disable the tests when cross-compiling to Linux.
+-if(UNIX AND NOT APPLE AND NOT WIN32 AND CMAKE_CROSSCOMPILING AND NOT QT_ENABLE_CMAKE_BOOT2QT_TESTS
++if((UNIX OR WASI) AND NOT APPLE AND NOT WIN32 AND CMAKE_CROSSCOMPILING AND NOT QT_ENABLE_CMAKE_BOOT2QT_TESTS
+     AND NOT QT_BUILD_MINIMAL_ANDROID_MULTI_ABI_TESTS)
+     message(STATUS "Running CMake tests is disabled when cross-compiling to Linux / Boot2Qt.")
+     return()
+-- 
+2.39.3 (Apple Git-146)
+
