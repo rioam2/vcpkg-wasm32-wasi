@@ -1,4 +1,4 @@
-From 47b4dbeaa2676e8dff16384baebb53904fe81897 Mon Sep 17 00:00:00 2001
+From 9d55341436f7989d88b29eb6ceeb688427150e4d Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -15,6 +15,7 @@ source files is a preferred option. For now, this
 patch provides the needed functionality while
 being as non-destructive as possible.
 ---
+ configure.cmake                               |  4 +-
  .../painting/painterpaths/CMakeLists.txt      |  2 +-
  mkspecs/linux-clang/qplatformdefs.h           |  8 ++
  src/3rdparty/freetype/CMakeLists.txt          |  2 +-
@@ -87,8 +88,23 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 72 files changed, 896 insertions(+), 72 deletions(-)
+ 73 files changed, 899 insertions(+), 73 deletions(-)
 
+diff --git a/configure.cmake b/configure.cmake
+index 43de2aa026..e75521f883 100644
+--- a/configure.cmake
++++ b/configure.cmake
+@@ -428,7 +428,9 @@ qt_config_compile_test(intelcet
+ }
+ ")
+ 
+-
++if (WASI)
++    add_compile_options(-fno-exceptions)
++endif()
+ 
+ #### Features
+ 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
 --- a/examples/widgets/painting/painterpaths/CMakeLists.txt
@@ -3587,5 +3603,5 @@ index 975cc6fc7d..87b7e3f080 100644
      message(STATUS "Running CMake tests is disabled when cross-compiling to Linux / Boot2Qt.")
      return()
 -- 
-2.39.3 (Apple Git-146)
+2.41.0
 
