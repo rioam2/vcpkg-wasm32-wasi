@@ -208,7 +208,7 @@ function(qt_cmake_configure)
                 -DQT_FEATURE_ctf=OFF
                 -DQT_FEATURE_cursor=ON
                 -DQT_FEATURE_cxx11_future=OFF
-                -DQT_FEATURE_cxx17_filesystem=OFF
+                -DQT_FEATURE_cxx17_filesystem=ON
                 -DQT_FEATURE_cxx20=OFF
                 -DQT_FEATURE_cxx2a=OFF
                 -DQT_FEATURE_cxx2b=OFF
