@@ -1,4 +1,4 @@
-From 9d55341436f7989d88b29eb6ceeb688427150e4d Mon Sep 17 00:00:00 2001
+From 5b64d50e6c92f9ce4e61db65e4cecb89cd4b406c Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -15,7 +15,6 @@ source files is a preferred option. For now, this
 patch provides the needed functionality while
 being as non-destructive as possible.
 ---
- configure.cmake                               |  4 +-
  .../painting/painterpaths/CMakeLists.txt      |  2 +-
  mkspecs/linux-clang/qplatformdefs.h           |  8 ++
  src/3rdparty/freetype/CMakeLists.txt          |  2 +-
@@ -70,7 +69,7 @@ being as non-destructive as possible.
  src/corelib/io/qstorageinfo_unix.cpp          | 48 +++++++++-
  src/corelib/io/qtemporaryfile.cpp             |  4 +
  src/corelib/kernel/qcore_unix_p.h             | 54 +++++++++++
- src/corelib/kernel/qcoreapplication.cpp       |  2 +-
+ src/corelib/kernel/qcoreapplication.cpp       |  6 +-
  src/corelib/kernel/qeventdispatcher_unix.cpp  |  4 +
  src/corelib/kernel/qeventdispatcher_unix_p.h  |  2 +
  src/corelib/text/qregularexpression.cpp       |  4 +
@@ -88,23 +87,8 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 73 files changed, 899 insertions(+), 73 deletions(-)
+ 72 files changed, 898 insertions(+), 74 deletions(-)
 
-diff --git a/configure.cmake b/configure.cmake
-index 43de2aa026..e75521f883 100644
---- a/configure.cmake
-+++ b/configure.cmake
-@@ -428,7 +428,9 @@ qt_config_compile_test(intelcet
- }
- ")
- 
--
-+if (WASI)
-+    add_compile_options(-fno-exceptions)
-+endif()
- 
- #### Features
- 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
 --- a/examples/widgets/painting/painterpaths/CMakeLists.txt
@@ -3069,7 +3053,7 @@ index ed64a5d86b..94beafec9b 100644
  #endif // QT_CONFIG(process)
  
 diff --git a/src/corelib/kernel/qcoreapplication.cpp b/src/corelib/kernel/qcoreapplication.cpp
-index a80efbb562..a7fe7e1bf8 100644
+index a80efbb562..478026009f 100644
 --- a/src/corelib/kernel/qcoreapplication.cpp
 +++ b/src/corelib/kernel/qcoreapplication.cpp
 @@ -448,7 +448,7 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv)
@@ -3081,6 +3065,24 @@ index a80efbb562..a7fe7e1bf8 100644
      if (Q_UNLIKELY(!setuidAllowed && (geteuid() != getuid())))
          qFatal("FATAL: The application binary appears to be running setuid, this is a security hole.");
  #  endif // Q_OS_UNIX
+@@ -603,7 +603,7 @@ void QCoreApplicationPrivate::initLocale()
+ {
+ #if defined(QT_BOOTSTRAPPED)
+     // Don't try to control bootstrap library locale or encoding.
+-#elif defined(Q_OS_UNIX)
++#elif defined(Q_OS_UNIX) || defined(Q_OS_WASI)
+     Q_CONSTINIT static bool qt_locale_initialized = false;
+     if (qt_locale_initialized)
+         return;
+@@ -616,7 +616,7 @@ void QCoreApplicationPrivate::initLocale()
+ 
+     // Next, let's ensure that LC_CTYPE is UTF-8, since QStringConverter's
+     // QLocal8Bit hard-codes this, and we need to be consistent.
+-#  if defined(Q_OS_INTEGRITY)
++#  if defined(Q_OS_INTEGRITY) | defined(Q_OS_WASI)
+     setlocale(LC_CTYPE, "UTF-8");
+ #  elif defined(Q_OS_QNX)
+     // QNX has no nl_langinfo, so we can't check.
 diff --git a/src/corelib/kernel/qeventdispatcher_unix.cpp b/src/corelib/kernel/qeventdispatcher_unix.cpp
 index c75b59acfe..77db4e5a97 100644
 --- a/src/corelib/kernel/qeventdispatcher_unix.cpp
@@ -3603,5 +3605,5 @@ index 975cc6fc7d..87b7e3f080 100644
      message(STATUS "Running CMake tests is disabled when cross-compiling to Linux / Boot2Qt.")
      return()
 -- 
-2.41.0
+2.39.3 (Apple Git-146)
 
