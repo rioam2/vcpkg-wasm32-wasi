@@ -1,4 +1,4 @@
-From 647abea4edc2bcdc6de12fd1a2eebb784a96aa90 Mon Sep 17 00:00:00 2001
+From 9984d3b687aab508dda036bb551d53619d99f1e3 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -3070,7 +3070,7 @@ index ed64a5d86b..94beafec9b 100644
  #endif // QT_CONFIG(process)
  
 diff --git a/src/corelib/kernel/qcoreapplication.cpp b/src/corelib/kernel/qcoreapplication.cpp
-index a80efbb562..226f8420bd 100644
+index a80efbb562..b98acb1aff 100644
 --- a/src/corelib/kernel/qcoreapplication.cpp
 +++ b/src/corelib/kernel/qcoreapplication.cpp
 @@ -448,7 +448,7 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv)
@@ -3104,7 +3104,7 @@ index a80efbb562..226f8420bd 100644
  #  if defined(Q_OS_ANDROID)
      // the actual process on Android is the Java VM, so this doesn't help us
      return QString();
-+#  if defined(Q_OS_WASI)
++#  elif defined(Q_OS_WASI)
 +    return QString();
  #  elif defined(Q_OS_LINUX)
      // this includes the Embedded Android builds
