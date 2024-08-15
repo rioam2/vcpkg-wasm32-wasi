@@ -1,4 +1,4 @@
-From 1cc42a7476a82a4ad87d2637022bc4550d8cb47c Mon Sep 17 00:00:00 2001
+From 5423a71445e55d68ecc92ee86aa692352d8c1a52 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -2453,14 +2453,14 @@ index 31b81734e8..8fb9043c8d 100644
          ipc/qsharedmemory_posix.cpp
      LIBRARIES
 diff --git a/src/corelib/global/qlibraryinfo.cpp b/src/corelib/global/qlibraryinfo.cpp
-index a8934fa38c..f74596d260 100644
+index a8934fa38c..b367248949 100644
 --- a/src/corelib/global/qlibraryinfo.cpp
 +++ b/src/corelib/global/qlibraryinfo.cpp
 @@ -89,6 +89,9 @@ void QLibrarySettings::load()
  
  static QSettings *findConfiguration()
  {
-+#if Q_OS_WASI
++#if defined(Q_OS_WASI)
 +    return nullptr;
 +#endif
      if (QLibraryInfoPrivate::qtconfManualPath)
