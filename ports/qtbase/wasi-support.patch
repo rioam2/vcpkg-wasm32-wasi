@@ -1,4 +1,4 @@
-From 5423a71445e55d68ecc92ee86aa692352d8c1a52 Mon Sep 17 00:00:00 2001
+From 4ae9fbee9da4b2f30ea8fac499909b0a48d7ce00 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -66,6 +66,7 @@ being as non-destructive as possible.
  src/corelib/global/qtenvironmentvariables.cpp |  8 ++
  src/corelib/io/qfilesystemengine_unix.cpp     | 45 +++++++--
  src/corelib/io/qlockfile_unix.cpp             |  4 +-
+ src/corelib/io/qloggingregistry.cpp           |  4 +
  src/corelib/io/qstandardpaths_unix.cpp        |  9 ++
  src/corelib/io/qstorageinfo_unix.cpp          | 48 +++++++++-
  src/corelib/io/qtemporaryfile.cpp             |  4 +
@@ -88,7 +89,7 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 73 files changed, 908 insertions(+), 74 deletions(-)
+ 74 files changed, 912 insertions(+), 74 deletions(-)
 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
@@ -2724,6 +2725,21 @@ index 47aff8b973..7b779ffd98 100644
  
      const QString processName = processNameByPid(pid);
      if (!processName.isEmpty()) {
+diff --git a/src/corelib/io/qloggingregistry.cpp b/src/corelib/io/qloggingregistry.cpp
+index 3c835cce5a..4cee262ad5 100644
+--- a/src/corelib/io/qloggingregistry.cpp
++++ b/src/corelib/io/qloggingregistry.cpp
+@@ -270,6 +270,10 @@ static QList<QLoggingRule> loadRulesFromFile(const QString &filePath)
+  */
+ void QLoggingRegistry::initializeRules()
+ {
++#if defined(Q_OS_WASI)
++    return;
++#endif
++    
+     QList<QLoggingRule> er, qr, cr;
+     // get rules from environment
+     const QByteArray rulesFilePath = qgetenv("QT_LOGGING_CONF");
 diff --git a/src/corelib/io/qstandardpaths_unix.cpp b/src/corelib/io/qstandardpaths_unix.cpp
 index 64d8a3fa49..618fbb2dcc 100644
 --- a/src/corelib/io/qstandardpaths_unix.cpp
