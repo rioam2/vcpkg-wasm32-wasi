@@ -1,4 +1,4 @@
-From 3615692f98ca3a5f6b085006c7516fc6bcacfdf8 Mon Sep 17 00:00:00 2001
+From 1afe44ba7477aa58122fabb699b6423cb54b10d2 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -82,6 +82,7 @@ being as non-destructive as possible.
  src/gui/image/qpnghandler.cpp                 |  8 ++
  src/gui/kernel/qguiapplication.cpp            |  4 +
  src/gui/painting/qgrayraster.c                | 14 +++
+ .../text/freetype/qfreetypefontdatabase.cpp   |  4 +
  src/network/CMakeLists.txt                    | 12 +--
  .../platforminputcontexts/CMakeLists.txt      |  2 +-
  src/plugins/platformthemes/CMakeLists.txt     |  2 +-
@@ -91,7 +92,7 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 76 files changed, 915 insertions(+), 77 deletions(-)
+ 77 files changed, 919 insertions(+), 77 deletions(-)
 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
@@ -3513,6 +3514,21 @@ index 3c222c49e1..2c557452b9 100644
  
      return error;
    }
+diff --git a/src/gui/text/freetype/qfreetypefontdatabase.cpp b/src/gui/text/freetype/qfreetypefontdatabase.cpp
+index cf1ca42ab4..d6b8bd15ae 100644
+--- a/src/gui/text/freetype/qfreetypefontdatabase.cpp
++++ b/src/gui/text/freetype/qfreetypefontdatabase.cpp
+@@ -24,6 +24,10 @@ using namespace Qt::StringLiterals;
+ 
+ void QFreeTypeFontDatabase::populateFontDatabase()
+ {
++#if defined(Q_OS_WASI)
++    return;
++#endif
++
+     QString fontpath = fontDir();
+     QDir dir(fontpath);
+ 
 diff --git a/src/network/CMakeLists.txt b/src/network/CMakeLists.txt
 index f1eb9fe5f7..c3492bfec6 100644
 --- a/src/network/CMakeLists.txt
