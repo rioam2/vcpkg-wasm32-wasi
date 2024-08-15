@@ -1,4 +1,4 @@
-From f7fb61855b2867565a97b67a0a58c91466efd94d Mon Sep 17 00:00:00 2001
+From 3615692f98ca3a5f6b085006c7516fc6bcacfdf8 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -63,6 +63,7 @@ being as non-destructive as possible.
  src/corelib/configure.cmake                   |  2 +-
  src/corelib/global/qlibraryinfo.cpp           |  8 ++
  src/corelib/global/qlogging.cpp               |  4 +
+ src/corelib/global/qrandom.cpp                |  4 +-
  src/corelib/global/qsystemdetection.h         |  3 +
  src/corelib/global/qtenvironmentvariables.cpp |  8 ++
  src/corelib/io/qfilesystemengine_unix.cpp     | 45 +++++++--
@@ -90,7 +91,7 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 75 files changed, 913 insertions(+), 75 deletions(-)
+ 76 files changed, 915 insertions(+), 77 deletions(-)
 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
@@ -2509,6 +2510,28 @@ index 627d62ed87..5aa687d6a2 100644
  }
  #elif defined(Q_OS_DARWIN)
  #  include <pthread.h>
+diff --git a/src/corelib/global/qrandom.cpp b/src/corelib/global/qrandom.cpp
+index c1c2792736..38e19f3cad 100644
+--- a/src/corelib/global/qrandom.cpp
++++ b/src/corelib/global/qrandom.cpp
+@@ -17,7 +17,7 @@
+ #  include <sys/auxv.h>
+ #endif
+ 
+-#if QT_CONFIG(getentropy) && __has_include(<sys/random.h>)
++#if (QT_CONFIG(getentropy) || defined(Q_OS_WASI)) && __has_include(<sys/random.h>)
+ #  include <sys/random.h>
+ #elif !QT_CONFIG(getentropy) && (!defined(Q_OS_BSD4) || defined(__GLIBC__)) && !defined(Q_OS_WIN)
+ #  include "qdeadlinetimer.h"
+@@ -64,7 +64,7 @@ QBasicAtomicInteger<uint> qt_randomdevice_control = Q_BASIC_ATOMIC_INITIALIZER(0
+ 
+ struct QRandomGenerator::SystemGenerator
+ {
+-#if QT_CONFIG(getentropy)
++#if QT_CONFIG(getentropy) || defined(Q_OS_WASI)
+     static qsizetype fillBuffer(void *buffer, qsizetype count) noexcept
+     {
+         // getentropy can read at most 256 bytes, so break the reading
 diff --git a/src/corelib/global/qsystemdetection.h b/src/corelib/global/qsystemdetection.h
 index 5188104310..c2c5bc736e 100644
 --- a/src/corelib/global/qsystemdetection.h
