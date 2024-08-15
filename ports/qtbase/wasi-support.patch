@@ -1,4 +1,4 @@
-From 4ae9fbee9da4b2f30ea8fac499909b0a48d7ce00 Mon Sep 17 00:00:00 2001
+From f7fb61855b2867565a97b67a0a58c91466efd94d Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -60,6 +60,7 @@ being as non-destructive as possible.
  src/3rdparty/harfbuzz-ng/CMakeLists.txt       |  2 +-
  src/3rdparty/libpng/pngconf.h                 |  7 ++
  src/corelib/CMakeLists.txt                    | 34 +++----
+ src/corelib/configure.cmake                   |  2 +-
  src/corelib/global/qlibraryinfo.cpp           |  8 ++
  src/corelib/global/qlogging.cpp               |  4 +
  src/corelib/global/qsystemdetection.h         |  3 +
@@ -89,7 +90,7 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 74 files changed, 912 insertions(+), 74 deletions(-)
+ 75 files changed, 913 insertions(+), 75 deletions(-)
 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
@@ -2453,6 +2454,19 @@ index 31b81734e8..8fb9043c8d 100644
      SOURCES
          ipc/qsharedmemory_posix.cpp
      LIBRARIES
+diff --git a/src/corelib/configure.cmake b/src/corelib/configure.cmake
+index 4fd8fea376..ce17b3547a 100644
+--- a/src/corelib/configure.cmake
++++ b/src/corelib/configure.cmake
+@@ -605,7 +605,7 @@ qt_feature("getauxval" PRIVATE
+ )
+ qt_feature("getentropy" PRIVATE
+     LABEL "getentropy()"
+-    CONDITION UNIX AND TEST_getentropy
++    CONDITION (UNIX OR WASI) AND TEST_getentropy
+ )
+ qt_feature("glib" PUBLIC PRIVATE
+     LABEL "GLib"
 diff --git a/src/corelib/global/qlibraryinfo.cpp b/src/corelib/global/qlibraryinfo.cpp
 index a8934fa38c..b367248949 100644
 --- a/src/corelib/global/qlibraryinfo.cpp
