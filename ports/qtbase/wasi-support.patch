@@ -1,4 +1,4 @@
-From 9984d3b687aab508dda036bb551d53619d99f1e3 Mon Sep 17 00:00:00 2001
+From 1cc42a7476a82a4ad87d2637022bc4550d8cb47c Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -60,7 +60,7 @@ being as non-destructive as possible.
  src/3rdparty/harfbuzz-ng/CMakeLists.txt       |  2 +-
  src/3rdparty/libpng/pngconf.h                 |  7 ++
  src/corelib/CMakeLists.txt                    | 34 +++----
- src/corelib/global/qlibraryinfo.cpp           |  5 +
+ src/corelib/global/qlibraryinfo.cpp           |  8 ++
  src/corelib/global/qlogging.cpp               |  4 +
  src/corelib/global/qsystemdetection.h         |  3 +
  src/corelib/global/qtenvironmentvariables.cpp |  8 ++
@@ -88,7 +88,7 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 73 files changed, 905 insertions(+), 74 deletions(-)
+ 73 files changed, 908 insertions(+), 74 deletions(-)
 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
@@ -2453,10 +2453,20 @@ index 31b81734e8..8fb9043c8d 100644
          ipc/qsharedmemory_posix.cpp
      LIBRARIES
 diff --git a/src/corelib/global/qlibraryinfo.cpp b/src/corelib/global/qlibraryinfo.cpp
-index a8934fa38c..dd45d7317d 100644
+index a8934fa38c..f74596d260 100644
 --- a/src/corelib/global/qlibraryinfo.cpp
 +++ b/src/corelib/global/qlibraryinfo.cpp
-@@ -263,6 +263,11 @@ static QString prefixFromAppDirHelper()
+@@ -89,6 +89,9 @@ void QLibrarySettings::load()
+ 
+ static QSettings *findConfiguration()
+ {
++#if Q_OS_WASI
++    return nullptr;
++#endif
+     if (QLibraryInfoPrivate::qtconfManualPath)
+         return new QSettings(*QLibraryInfoPrivate::qtconfManualPath, QSettings::IniFormat);
+ 
+@@ -263,6 +266,11 @@ static QString prefixFromAppDirHelper()
  {
      QString appDir;
  
