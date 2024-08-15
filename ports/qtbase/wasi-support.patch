@@ -1,4 +1,4 @@
-From d228892363b5ee5c7652ba181d7ead79f1a2fdc5 Mon Sep 17 00:00:00 2001
+From 647abea4edc2bcdc6de12fd1a2eebb784a96aa90 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -70,7 +70,7 @@ being as non-destructive as possible.
  src/corelib/io/qstorageinfo_unix.cpp          | 48 +++++++++-
  src/corelib/io/qtemporaryfile.cpp             |  4 +
  src/corelib/kernel/qcore_unix_p.h             | 54 +++++++++++
- src/corelib/kernel/qcoreapplication.cpp       |  6 +-
+ src/corelib/kernel/qcoreapplication.cpp       |  8 +-
  src/corelib/kernel/qeventdispatcher_unix.cpp  |  4 +
  src/corelib/kernel/qeventdispatcher_unix_p.h  |  2 +
  src/corelib/text/qregularexpression.cpp       |  4 +
@@ -88,7 +88,7 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 73 files changed, 903 insertions(+), 74 deletions(-)
+ 73 files changed, 905 insertions(+), 74 deletions(-)
 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
@@ -3070,7 +3070,7 @@ index ed64a5d86b..94beafec9b 100644
  #endif // QT_CONFIG(process)
  
 diff --git a/src/corelib/kernel/qcoreapplication.cpp b/src/corelib/kernel/qcoreapplication.cpp
-index a80efbb562..478026009f 100644
+index a80efbb562..226f8420bd 100644
 --- a/src/corelib/kernel/qcoreapplication.cpp
 +++ b/src/corelib/kernel/qcoreapplication.cpp
 @@ -448,7 +448,7 @@ QCoreApplicationPrivate::QCoreApplicationPrivate(int &aargc, char **aargv)
@@ -3100,6 +3100,15 @@ index a80efbb562..478026009f 100644
      setlocale(LC_CTYPE, "UTF-8");
  #  elif defined(Q_OS_QNX)
      // QNX has no nl_langinfo, so we can't check.
+@@ -2408,6 +2408,8 @@ static QString qAppFileName()
+ #  if defined(Q_OS_ANDROID)
+     // the actual process on Android is the Java VM, so this doesn't help us
+     return QString();
++#  if defined(Q_OS_WASI)
++    return QString();
+ #  elif defined(Q_OS_LINUX)
+     // this includes the Embedded Android builds
+     return QFile::decodeName(qt_readlink("/proc/self/exe"));
 diff --git a/src/corelib/kernel/qeventdispatcher_unix.cpp b/src/corelib/kernel/qeventdispatcher_unix.cpp
 index c75b59acfe..77db4e5a97 100644
 --- a/src/corelib/kernel/qeventdispatcher_unix.cpp
