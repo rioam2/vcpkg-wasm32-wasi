@@ -1,4 +1,4 @@
-From 8dd704a70b34b6f7beb7a0f612e4733453a20417 Mon Sep 17 00:00:00 2001
+From ca375fb46df0d37d63a4ccd03f55009e9e8cb07c Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
 Subject: [PATCH] chore: add rudimentary wasi support
@@ -66,7 +66,7 @@ being as non-destructive as possible.
  src/corelib/global/qrandom.cpp                |  4 +-
  src/corelib/global/qsystemdetection.h         |  3 +
  src/corelib/global/qtenvironmentvariables.cpp |  8 ++
- src/corelib/io/qfilesystemengine_unix.cpp     | 45 +++++++--
+ src/corelib/io/qfilesystemengine_unix.cpp     | 47 ++++++++--
  src/corelib/io/qlockfile_unix.cpp             |  4 +-
  src/corelib/io/qloggingregistry.cpp           |  4 +
  src/corelib/io/qstandardpaths_unix.cpp        |  9 ++
@@ -77,7 +77,6 @@ being as non-destructive as possible.
  src/corelib/kernel/qeventdispatcher_unix.cpp  |  4 +
  src/corelib/kernel/qeventdispatcher_unix_p.h  |  2 +
  src/corelib/text/qregularexpression.cpp       |  4 +
- src/corelib/thread/qatomic_cxx11.h            |  8 ++
  src/corelib/thread/qthread_unix.cpp           |  2 +-
  src/gui/CMakeLists.txt                        | 28 +++---
  src/gui/image/qpnghandler.cpp                 |  8 ++
@@ -93,7 +92,7 @@ being as non-destructive as possible.
  src/printsupport/CMakeLists.txt               |  6 +-
  src/tools/bootstrap/CMakeLists.txt            |  4 +-
  tests/auto/cmake/CMakeLists.txt               |  2 +-
- 78 files changed, 927 insertions(+), 77 deletions(-)
+ 77 files changed, 921 insertions(+), 77 deletions(-)
 
 diff --git a/examples/widgets/painting/painterpaths/CMakeLists.txt b/examples/widgets/painting/painterpaths/CMakeLists.txt
 index 0a701d82ab..fc4f7365a8 100644
@@ -2585,7 +2584,7 @@ index 9e2ffe54a9..093106db48 100644
          if (ok)
              memcpy(name, src, std::min(sizeof(name), strlen(src) + 1));
 diff --git a/src/corelib/io/qfilesystemengine_unix.cpp b/src/corelib/io/qfilesystemengine_unix.cpp
-index f343276416..440634f14b 100644
+index f343276416..a03d2c4f4f 100644
 --- a/src/corelib/io/qfilesystemengine_unix.cpp
 +++ b/src/corelib/io/qfilesystemengine_unix.cpp
 @@ -17,7 +17,9 @@
@@ -2672,7 +2671,23 @@ index f343276416..440634f14b 100644
  }
  
  #if defined(Q_OS_DARWIN)
-@@ -1042,7 +1058,7 @@ bool QFileSystemEngine::cloneFile(int srcfd, int dstfd, const QFileSystemMetaDat
+@@ -889,6 +905,7 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
+         struct statx statxBuffer;
+     };
+     int statResult = -1;
++#if !defined(Q_OS_WASI)
+     if (what & QFileSystemMetaData::LinkType) {
+         mode_t mode = 0;
+         statResult = qt_lstatx(nativeFilePath, &statxBuffer);
+@@ -925,6 +942,7 @@ bool QFileSystemEngine::fillMetaData(const QFileSystemEntry &entry, QFileSystemM
+ 
+         data.knownFlagsMask |= QFileSystemMetaData::LinkType;
+     }
++#endif
+ 
+     // second, we try a regular stat(2)
+     if (statResult == -1 && (what & QFileSystemMetaData::PosixStatFlags)) {
+@@ -1042,7 +1060,7 @@ bool QFileSystemEngine::cloneFile(int srcfd, int dstfd, const QFileSystemMetaDat
          return false;
      }
  
@@ -2681,7 +2696,7 @@ index f343276416..440634f14b 100644
      // first, try FICLONE (only works on regular files and only on certain fs)
      if (::ioctl(dstfd, FICLONE, srcfd) == 0)
          return true;
-@@ -1186,6 +1202,12 @@ bool QFileSystemEngine::createLink(const QFileSystemEntry &source, const QFileSy
+@@ -1186,6 +1204,12 @@ bool QFileSystemEngine::createLink(const QFileSystemEntry &source, const QFileSy
  #ifndef QT_BOOTSTRAPPED
  static QString freeDesktopTrashLocation(const QString &sourcePath)
  {
@@ -2694,7 +2709,7 @@ index f343276416..440634f14b 100644
      auto makeTrashDir = [](const QDir &topDir, const QString &trashDir = QString()) {
          auto ownerPerms = QFileDevice::ReadOwner
                          | QFileDevice::WriteOwner
-@@ -1201,7 +1223,6 @@ static QString freeDesktopTrashLocation(const QString &sourcePath)
+@@ -1201,7 +1225,6 @@ static QString freeDesktopTrashLocation(const QString &sourcePath)
          return QString();
      };
  
@@ -2702,7 +2717,7 @@ index f343276416..440634f14b 100644
      const QStorageInfo sourceStorage(sourcePath);
      const QStorageInfo homeStorage(QDir::home());
      // We support trashing of files outside the users home partition
-@@ -1275,8 +1296,8 @@ static QString freeDesktopTrashLocation(const QString &sourcePath)
+@@ -1275,8 +1298,8 @@ static QString freeDesktopTrashLocation(const QString &sourcePath)
                       topDir.path().toLocal8Bit().constData());
          }
      }
@@ -2712,7 +2727,7 @@ index f343276416..440634f14b 100644
  }
  #endif // QT_BOOTSTRAPPED
  
-@@ -1503,7 +1524,13 @@ bool QFileSystemEngine::setPermissions(const QFileSystemEntry &entry, QFile::Per
+@@ -1503,7 +1526,13 @@ bool QFileSystemEngine::setPermissions(const QFileSystemEntry &entry, QFile::Per
      Q_CHECK_FILE_NAME(entry, false);
  
      mode_t mode = QtPrivate::toMode_t(permissions);
@@ -2726,7 +2741,7 @@ index f343276416..440634f14b 100644
      if (success && data) {
          data->entryFlags &= ~QFileSystemMetaData::Permissions;
          data->entryFlags |= QFileSystemMetaData::MetaDataFlag(uint(permissions.toInt()));
-@@ -1519,7 +1546,13 @@ bool QFileSystemEngine::setPermissions(int fd, QFile::Permissions permissions, Q
+@@ -1519,7 +1548,13 @@ bool QFileSystemEngine::setPermissions(int fd, QFile::Permissions permissions, Q
  {
      mode_t mode = QtPrivate::toMode_t(permissions);
  
@@ -3233,33 +3248,6 @@ index 93e4f7d1f9..c0bef1020a 100644
  }
  
  /*!
-diff --git a/src/corelib/thread/qatomic_cxx11.h b/src/corelib/thread/qatomic_cxx11.h
-index 4f55a53ae3..ed428e8f8f 100644
---- a/src/corelib/thread/qatomic_cxx11.h
-+++ b/src/corelib/thread/qatomic_cxx11.h
-@@ -255,14 +255,22 @@ template <typename X> struct QAtomicOps
-          * this issue and to avoid UB on signed overflow, we rewrite the
-          * expression to:
-          */
-+#if defined(Q_OS_WASI)
-+        return _q_value++ != T(-1);
-+#else
-         return _q_value.fetch_add(1, std::memory_order_acq_rel) != T(-1);
-+#endif
-     }
- 
-     template <typename T>
-     static inline bool deref(std::atomic<T> &_q_value) noexcept
-     {
-         // compare with ref
-+#if defined(Q_OS_WASI)
-+        return _q_value-- != T(1);
-+#else
-         return _q_value.fetch_sub(1, std::memory_order_acq_rel) != T(1);
-+#endif
-     }
- 
-     static inline bool isTestAndSetNative() noexcept
 diff --git a/src/corelib/thread/qthread_unix.cpp b/src/corelib/thread/qthread_unix.cpp
 index dee71305cc..614bf6605c 100644
 --- a/src/corelib/thread/qthread_unix.cpp
