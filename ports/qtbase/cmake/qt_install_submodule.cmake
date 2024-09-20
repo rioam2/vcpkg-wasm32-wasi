@@ -146,7 +146,7 @@ function(qt_cmake_configure)
 
     set(MAKE_TARGET_MKSPEC "")
     if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32")
-        set(MAKE_TARGET_MKSPEC "-DQT_QMAKE_TARGET_MKSPEC=linux-clang-libc++-32")
+        set(MAKE_TARGET_MKSPEC "-DQT_QMAKE_TARGET_MKSPEC=wasm32-wasi-clang-libc++-32")
     endif()
     if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32") 
         vcpkg_cmake_configure(
@@ -169,6 +169,7 @@ function(qt_cmake_configure)
                 -DINSTALL_PLUGINSDIR:STRING=${qt_plugindir}
                 -DINSTALL_QMLDIR:STRING=${qt_qmldir}
                 ${_qarg_OPTIONS}
+                -DUNIX:BOOL=ON \
                 -DQT_FEATURE_accessibility_atspi_bridge=OFF
                 -DQT_FEATURE_accessibility=OFF
                 -DQT_FEATURE_action=OFF
