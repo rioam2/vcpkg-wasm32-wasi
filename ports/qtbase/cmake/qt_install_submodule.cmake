@@ -146,7 +146,7 @@ function(qt_cmake_configure)
 
     set(MAKE_TARGET_MKSPEC "")
     if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32")
-        set(MAKE_TARGET_MKSPEC "-DQT_QMAKE_TARGET_MKSPEC=wasm32-wasi-clang-libc++-32")
+        set(MAKE_TARGET_MKSPEC "-DQT_QMAKE_TARGET_MKSPEC=linux-clang-libc++-32")
     endif()
     if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32") 
         vcpkg_cmake_configure(
