@@ -1,4 +1,3 @@
-
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
@@ -13,7 +12,7 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
  
  target_link_libraries(boost_container
    PUBLIC
-@@ -34,13 +36,9 @@
+@@ -33,13 +35,9 @@
    # Source files already define BOOST_CONTAINER_SOURCE
    # PRIVATE BOOST_CONTAINER_SOURCE
  )
