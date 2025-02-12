@@ -1,7 +1,7 @@
-From f4802076c8d9a6316ae129d2ff8bac0f0da9f36b Mon Sep 17 00:00:00 2001
+From 75574c510aef58412a0ec83c383d24c85b063a22 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio@riomartinez.com>
 Date: Tue, 9 Jul 2024 16:25:57 +0200
-Subject: [PATCH] chore: add rudimentary wasi support
+Subject: [PATCH 1/2] chore: add rudimentary wasi support
 
 This PR adds rudimentary WebAssembly/WASI support
 by excluding unsupported calls to non-implemented
@@ -39,10 +39,11 @@ library is uploaded to the run as an artifact.
  src/corelib/io/qloggingregistry.cpp           |  4 ++
  src/corelib/kernel/qcore_unix_p.h             | 54 +++++++++++++++++++
  src/corelib/kernel/qcoreapplication.cpp       |  8 +--
+ src/corelib/kernel/qtestsupport_core.cpp      |  4 ++
  src/gui/kernel/qguiapplication.cpp            |  4 ++
  src/gui/painting/qgrayraster.c                | 14 +++++
  .../text/freetype/qfreetypefontdatabase.cpp   |  4 ++
- 14 files changed, 120 insertions(+), 7 deletions(-)
+ 15 files changed, 124 insertions(+), 7 deletions(-)
 
 diff --git a/src/3rdparty/freetype/src/sfnt/ttcmap.c b/src/3rdparty/freetype/src/sfnt/ttcmap.c
 index 9ba25dcbc1..6d00f14362 100644
@@ -453,6 +454,26 @@ index a80efbb562..b98acb1aff 100644
  #  elif defined(Q_OS_LINUX)
      // this includes the Embedded Android builds
      return QFile::decodeName(qt_readlink("/proc/self/exe"));
+diff --git a/src/corelib/kernel/qtestsupport_core.cpp b/src/corelib/kernel/qtestsupport_core.cpp
+index bc461114d8..05a5932ad7 100644
+--- a/src/corelib/kernel/qtestsupport_core.cpp
++++ b/src/corelib/kernel/qtestsupport_core.cpp
+@@ -3,6 +3,8 @@
+ 
+ #include "qtestsupport_core.h"
+ 
++#ifndef _LIBCPP_HAS_NO_THREADS
++
+ #include <thread>
+ 
+ QT_BEGIN_NAMESPACE
+@@ -87,3 +89,5 @@ Q_CORE_EXPORT void QTest::qWait(int ms)
+ }
+ 
+ QT_END_NAMESPACE
++
++#endif
+\ No newline at end of file
 diff --git a/src/gui/kernel/qguiapplication.cpp b/src/gui/kernel/qguiapplication.cpp
 index 690a6f2412..b544e08be6 100644
 --- a/src/gui/kernel/qguiapplication.cpp
