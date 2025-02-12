@@ -8,6 +8,7 @@ vcpkg_from_github(
     HEAD_REF master
     PATCHES
         no-static-assert.diff
+        wasi-support.diff
 )
 
 set(FEATURE_OPTIONS "")

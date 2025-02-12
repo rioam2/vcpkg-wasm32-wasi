@@ -1,0 +1,30 @@
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -17,8 +17,10 @@
+ )
+ 
+ add_library(Boost::container ALIAS boost_container)
+ 
++target_compile_options(boost_container PUBLIC -fdeclspec)
++
+ target_include_directories(boost_container PUBLIC include)
+ 
+ target_link_libraries(boost_container
+   PUBLIC
+@@ -34,13 +36,9 @@
+   # Source files already define BOOST_CONTAINER_SOURCE
+   # PRIVATE BOOST_CONTAINER_SOURCE
+ )
+ 
+-if(BUILD_SHARED_LIBS)
+-  target_compile_definitions(boost_container PUBLIC BOOST_CONTAINER_DYN_LINK)
+-else()
+-  target_compile_definitions(boost_container PUBLIC BOOST_CONTAINER_STATIC_LINK)
+-endif()
++target_compile_definitions(boost_container PUBLIC BOOST_CONTAINER_STATIC_LINK)
+ 
+ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/CMakeLists.txt")
+ 
+   add_subdirectory(test)
