@@ -1,7 +1,7 @@
 {
   "name": "qtbase",
   "version": "6.8.3",
-  "port-version": 2,
+  "port-version": 3,
   "description": "Qt Base (Core, Gui, Widgets, Network, ...)",
   "homepage": "https://www.qt.io/",
   "license": null,
@@ -9,11 +9,12 @@
   "dependencies": [
     {
       "name": "libb2",
-      "platform": "!windows"
+      "platform": "!windows & !wasm32"
     },
     {
       "name": "pcre2",
-      "default-features": false
+      "default-features": false,
+      "platform": "!wasm32"
     },
     {
       "name": "qtbase",
@@ -139,7 +140,10 @@
     "brotli": {
       "description": "Support for downloading and decompressing resources compressed with Brotli through QNetworkAccessManager.",
       "dependencies": [
-        "brotli",
+        {
+          "name": "brotli",
+          "platform": "!wasm32"
+        },
         {
           "name": "qtbase",
           "default-features": false,
@@ -239,7 +243,8 @@
       "dependencies": [
         {
           "name": "freetype",
-          "default-features": false
+          "default-features": false,
+          "platform": "!wasm32"
         }
       ]
     },
@@ -397,14 +402,18 @@
       "dependencies": [
         {
           "name": "pcre2",
-          "default-features": false
+          "default-features": false,
+          "platform": "!wasm32"
         }
       ]
     },
     "png": {
       "description": "Enable PNG",
       "dependencies": [
-        "libpng",
+        {
+          "name": "libpng",
+          "platform": "!wasm32"
+        },
         {
           "name": "qtbase",
           "default-features": false,
