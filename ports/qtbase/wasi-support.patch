@@ -1,4 +1,4 @@
-From 2b76521384482c32c96028eead1947d3c8b1f5fa Mon Sep 17 00:00:00 2001
+From 2b76521384482c32c96028eead1947d3c8b1f5fa Mon Sep 17 00:00:01 2001
 From: Rio Martinez <rio.martinez@remarkable.com>
 Date: Wed, 18 Jun 2025 17:07:49 +0200
 Subject: [PATCH] chore: wasi support
