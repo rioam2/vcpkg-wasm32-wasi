@@ -1,4 +1,4 @@
-From 2b76521384482c32c96028eead1947d3c8b1f5fa Mon Sep 17 00:00:01 2001
+From fa520d9076806060ca103844f587462bd38981f7 Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio.martinez@remarkable.com>
 Date: Wed, 18 Jun 2025 17:07:49 +0200
 Subject: [PATCH] chore: wasi support
@@ -9,8 +9,8 @@ WASI/posix syscalls.
 
 This also adds an OS definition for WASI in Qt.
 ---
- src/corelib/global/qsystemdetection.h                     | 2 ++
- src/plugins/platforms/offscreen/qoffscreenintegration.cpp | 2 +-
+ src/corelib/global/qsystemdetection.h | 2 ++
+ src/gui/CMakeLists.txt                | 2 +-
  2 files changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/src/corelib/global/qsystemdetection.h b/src/corelib/global/qsystemdetection.h
@@ -26,19 +26,19 @@ index 0cbcef27407..0dfb4f0070a 100644
  #else
  #  error "Qt has not been ported to this OS - see http://www.qt-project.org/"
  #endif
-diff --git a/src/plugins/platforms/offscreen/qoffscreenintegration.cpp b/src/plugins/platforms/offscreen/qoffscreenintegration.cpp
-index 5decacc61a3..1932b0b015f 100644
---- a/src/plugins/platforms/offscreen/qoffscreenintegration.cpp
-+++ b/src/plugins/platforms/offscreen/qoffscreenintegration.cpp
-@@ -341,7 +341,7 @@ QPlatformBackingStore *QOffscreenIntegration::createPlatformBackingStore(QWindow
+diff --git a/src/gui/CMakeLists.txt b/src/gui/CMakeLists.txt
+index 2cc72625131..02fb20d9e96 100644
+--- a/src/gui/CMakeLists.txt
++++ b/src/gui/CMakeLists.txt
+@@ -992,7 +992,7 @@ qt_internal_extend_target(Gui CONDITION UNIX
+         platform/unix/qunixnativeinterface.cpp
+ )
  
- QAbstractEventDispatcher *QOffscreenIntegration::createEventDispatcher() const
- {
--#if defined(Q_OS_UNIX)
-+#if defined(Q_OS_UNIX) && !defined(Q_OS_WASI)
-     return createUnixEventDispatcher();
- #elif defined(Q_OS_WIN)
-     return new QOffscreenEventDispatcher<QEventDispatcherWin32>();
+-qt_internal_extend_target(Gui CONDITION UNIX AND NOT WASM
++qt_internal_extend_target(Gui CONDITION UNIX AND (NOT WASM OR WASI)
+     SOURCES
+         platform/unix/qgenericunixeventdispatcher.cpp platform/unix/qgenericunixeventdispatcher_p.h
+         platform/unix/qunixeventdispatcher.cpp
 -- 
 2.39.5 (Apple Git-154)
 
