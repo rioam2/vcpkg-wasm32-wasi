@@ -458,10 +458,7 @@ function(qt_cmake_configure)
                 -DQT_FEATURE_xmlstreamwriter=ON
                 -DQT_FEATURE_xrender=OFF
                 -DQT_FEATURE_zstd=OFF
-                -DQT_USE_BUNDLED_BundledFreetype=ON
-                -DQT_USE_BUNDLED_BundledLibpng=ON
                 -DQT_USE_BUNDLED_BundledPcre2=ON
-                -DQT_USE_BUNDLED_BundledZLIB=ON
             OPTIONS_RELEASE
                 ${_qarg_OPTIONS_RELEASE}
                 -DINSTALL_DOCDIR:STRING=doc/${QT6_DIRECTORY_PREFIX}

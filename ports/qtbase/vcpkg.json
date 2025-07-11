@@ -1,7 +1,7 @@
 {
   "name": "qtbase",
   "version": "6.8.3",
-  "port-version": 5,
+  "port-version": 6,
   "description": "Qt Base (Core, Gui, Widgets, Network, ...)",
   "homepage": "https://www.qt.io/",
   "license": null,
@@ -410,10 +410,7 @@
     "png": {
       "description": "Enable PNG",
       "dependencies": [
-        {
-          "name": "libpng",
-          "platform": "!wasm32"
-        },
+        "libpng",
         {
           "name": "qtbase",
           "default-features": false,

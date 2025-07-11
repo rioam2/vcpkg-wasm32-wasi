@@ -1,4 +1,4 @@
-From fa520d9076806060ca103844f587462bd38981f7 Mon Sep 17 00:00:00 2001
+From eae27016030f9e2b6b267a4595ca892da3eac1bb Mon Sep 17 00:00:00 2001
 From: Rio Martinez <rio.martinez@remarkable.com>
 Date: Wed, 18 Jun 2025 17:07:49 +0200
 Subject: [PATCH] chore: wasi support
@@ -9,9 +9,9 @@ WASI/posix syscalls.
 
 This also adds an OS definition for WASI in Qt.
 ---
- src/corelib/global/qsystemdetection.h | 2 ++
- src/gui/CMakeLists.txt                | 2 +-
- 2 files changed, 3 insertions(+), 1 deletion(-)
+ src/corelib/global/qsystemdetection.h        | 2 ++
+ src/corelib/kernel/qeventdispatcher_unix.cpp | 2 ++
+ 2 files changed, 4 insertions(+)
 
 diff --git a/src/corelib/global/qsystemdetection.h b/src/corelib/global/qsystemdetection.h
 index 0cbcef27407..0dfb4f0070a 100644
@@ -26,19 +26,21 @@ index 0cbcef27407..0dfb4f0070a 100644
  #else
  #  error "Qt has not been ported to this OS - see http://www.qt-project.org/"
  #endif
-diff --git a/src/gui/CMakeLists.txt b/src/gui/CMakeLists.txt
-index 2cc72625131..02fb20d9e96 100644
---- a/src/gui/CMakeLists.txt
-+++ b/src/gui/CMakeLists.txt
-@@ -992,7 +992,7 @@ qt_internal_extend_target(Gui CONDITION UNIX
-         platform/unix/qunixnativeinterface.cpp
- )
+diff --git a/src/corelib/kernel/qeventdispatcher_unix.cpp b/src/corelib/kernel/qeventdispatcher_unix.cpp
+index 1b7a6537b05..b3aaa14a94e 100644
+--- a/src/corelib/kernel/qeventdispatcher_unix.cpp
++++ b/src/corelib/kernel/qeventdispatcher_unix.cpp
+@@ -174,8 +174,10 @@ int QThreadPipe::check(const pollfd &pfd)
  
--qt_internal_extend_target(Gui CONDITION UNIX AND NOT WASM
-+qt_internal_extend_target(Gui CONDITION UNIX AND (NOT WASM OR WASI)
-     SOURCES
-         platform/unix/qgenericunixeventdispatcher.cpp platform/unix/qgenericunixeventdispatcher_p.h
-         platform/unix/qunixeventdispatcher.cpp
+ QEventDispatcherUNIXPrivate::QEventDispatcherUNIXPrivate()
+ {
++#if !defined(Q_OS_WASI)
+     if (Q_UNLIKELY(threadPipe.init() == false))
+         qFatal("QEventDispatcherUNIXPrivate(): Cannot continue without a thread pipe");
++#endif
+ }
+ 
+ QEventDispatcherUNIXPrivate::~QEventDispatcherUNIXPrivate()
 -- 
 2.39.5 (Apple Git-154)
 
