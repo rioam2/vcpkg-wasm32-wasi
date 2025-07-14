@@ -1,15 +1,19 @@
 {
   "name": "qtbase",
-  "version": "6.6.1",
-  "port-version": 32,
-  "description": "Qt Application Framework Base Module. Includes Core, GUI, Widgets, Networking, SQL, Concurrent and other essential qt components.",
+  "version": "6.8.3",
+  "port-version": 3,
+  "description": "Qt Base (Core, Gui, Widgets, Network, ...)",
   "homepage": "https://www.qt.io/",
   "license": null,
   "supports": "!uwp",
-  "builtin-baseline": "fba75d09065fcc76a25dcf386b1d00d33f5175af",
   "dependencies": [
-    { 
-      "name": "pcre2", 
+    {
+      "name": "libb2",
+      "platform": "!windows & !wasm32"
+    },
+    {
+      "name": "pcre2",
+      "default-features": false,
       "platform": "!wasm32"
     },
     {
@@ -28,9 +32,19 @@
       "name": "qtbase",
       "default-features": false,
       "features": [
+        "cups",
         "thread"
       ],
       "platform": "osx"
+    },
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": [
+        "concurrent",
+        "thread"
+      ],
+      "platform": "android"
     },
     {
       "name": "qtbase",
@@ -51,12 +65,35 @@
     "zlib"
   ],
   "default-features": [
+    {
+      "name": "appstore-compliant",
+      "platform": "uwp"
+    },
     "brotli",
     "concurrent",
-    "dbus",
-    "default-features",
+    {
+      "name": "dbus",
+      "platform": "!(static & windows) & !android"
+    },
+    "dnslookup",
     "doubleconversion",
+    {
+      "name": "egl",
+      "platform": "linux"
+    },
+    {
+      "name": "egl",
+      "platform": "android"
+    },
+    {
+      "name": "fontconfig",
+      "platform": "linux"
+    },
     "freetype",
+    {
+      "name": "gles2",
+      "platform": "android"
+    },
     "gui",
     "harfbuzz",
     "icu",
@@ -82,6 +119,18 @@
     "testlib",
     "thread",
     "widgets",
+    {
+      "name": "xcb",
+      "platform": "linux"
+    },
+    {
+      "name": "xcb-xlib",
+      "platform": "linux"
+    },
+    {
+      "name": "xrender",
+      "platform": "linux"
+    },
     "zstd"
   ],
   "features": {
@@ -116,9 +165,25 @@
         }
       ]
     },
+    "cups": {
+      "description": "Provides support for the Common Unix Printing System.",
+      "supports": "linux | osx"
+    },
     "dbus": {
       "description": "Qt D-Bus",
       "dependencies": [
+        {
+          "name": "dbus",
+          "default-features": false
+        },
+        {
+          "name": "qtbase",
+          "host": true,
+          "default-features": false,
+          "features": [
+            "dbus"
+          ]
+        },
         {
           "name": "qtbase",
           "default-features": false,
@@ -128,37 +193,16 @@
         }
       ]
     },
-    "default-features": {
-      "description": "Platform-dependent default features",
+    "dnslookup": {
+      "description": "Enable DNS lookup support",
       "dependencies": [
         {
           "name": "qtbase",
           "default-features": false,
           "features": [
-            "appstore-compliant"
-          ],
-          "platform": "uwp"
-        },
-        {
-          "name": "qtbase",
-          "default-features": false,
-          "features": [
-            "egl",
-            "fontconfig",
-            "xcb",
-            "xcb-xlib",
-            "xrender"
-          ],
-          "platform": "linux"
-        },
-        {
-          "name": "qtbase",
-          "default-features": false,
-          "features": [
-            "egl",
-            "gles2"
-          ],
-          "platform": "android"
+            "network",
+            "thread"
+          ]
         }
       ]
     },
@@ -170,19 +214,21 @@
     },
     "egl": {
       "description": "EGL",
-      "supports": "linux",
+      "supports": "android | linux",
       "dependencies": [
         "egl"
       ]
     },
     "fontconfig": {
       "description": "Use fontconfig",
+      "supports": "!osx & !windows",
       "dependencies": [
         "fontconfig",
         {
           "name": "qtbase",
           "default-features": false,
           "features": [
+            "freetype",
             "gui"
           ]
         }
@@ -197,8 +243,8 @@
       "dependencies": [
         {
           "name": "freetype",
-          "platform": "!wasm32",
-          "default-features": false
+          "default-features": false,
+          "platform": "!wasm32"
         }
       ]
     },
@@ -269,6 +315,16 @@
             "opengl"
           ],
           "platform": "osx"
+        },
+        {
+          "name": "qtbase",
+          "default-features": false,
+          "features": [
+            "egl",
+            "gles2",
+            "opengl"
+          ],
+          "platform": "android"
         },
         {
           "name": "qtbase",
@@ -346,6 +402,7 @@
       "dependencies": [
         {
           "name": "pcre2",
+          "default-features": false,
           "platform": "!wasm32"
         }
       ]
@@ -353,10 +410,7 @@
     "png": {
       "description": "Enable PNG",
       "dependencies": [
-        {
-          "name": "libpng",
-          "platform": "!wasm32"
-        },
+        "libpng",
         {
           "name": "qtbase",
           "default-features": false,
@@ -369,6 +423,12 @@
     "securetransport": {
       "description": "Enable Secure Transport",
       "supports": "ios | osx"
+    },
+    "shared-mime-info": {
+      "description": "Use GPL licensed shared-mime-info port from freedesktop.org",
+      "dependencies": [
+        "shared-mime-info"
+      ]
     },
     "sql": {
       "description": "Qt Sql",
@@ -533,27 +593,5 @@
         "zstd"
       ]
     }
-  },
-  "overrides": [
-    {
-      "name": "brotli",
-      "version": "1.1.0"
-    },
-    {
-      "name": "bzip2",
-      "version": "1.0.8"
-    },
-    {
-      "name": "freetype",
-      "version": "2.13.2"
-    },
-    {
-      "name": "libpng",
-      "version": "1.6.43"
-    },
-    {
-      "name": "pcre2",
-      "version": "10.42"
-    }
-  ]
+  }
 }

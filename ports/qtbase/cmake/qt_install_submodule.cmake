@@ -8,8 +8,15 @@ if(NOT DEFINED QT6_DIRECTORY_PREFIX)
     set(QT6_DIRECTORY_PREFIX "Qt6/")
 endif()
 
-if(VCPKG_TARGET_IS_ANDROID AND NOT ANDROID_SDK_ROOT)
-    message(FATAL_ERROR "${PORT} requires ANDROID_SDK_ROOT to be set. Consider adding it to the triplet." )
+if(VCPKG_TARGET_IS_ANDROID)
+    # ANDROID_HOME: canonical SDK environment variable
+    # ANDROID_SDK_ROOT: legacy qtbase triplet variable
+    if(NOT ANDROID_SDK_ROOT)
+        if("$ENV{ANDROID_HOME}" STREQUAL "")
+            message(FATAL_ERROR "${PORT} requires environment variable ANDROID_HOME to be set.")
+        endif()
+        set(ANDROID_SDK_ROOT "$ENV{ANDROID_HOME}")
+    endif()
 endif()
 
 function(qt_download_submodule_impl)
@@ -26,7 +33,7 @@ function(qt_download_submodule_impl)
         if(PORT STREQUAL "qttools") # Keep this for beta & rc's
             vcpkg_from_git(
                 OUT_SOURCE_PATH SOURCE_PATH_QLITEHTML
-                URL git://code.qt.io/playground/qlitehtml.git # git://code.qt.io/playground/qlitehtml.git
+                URL https://code.qt.io/playground/qlitehtml.git
                 REF "${${PORT}_qlitehtml_REF}"
                 FETCH_REF master
                 HEAD_REF master
@@ -44,7 +51,7 @@ function(qt_download_submodule_impl)
         elseif(PORT STREQUAL "qtwebengine")
             vcpkg_from_git(
                 OUT_SOURCE_PATH SOURCE_PATH_WEBENGINE
-                URL git://code.qt.io/qt/qtwebengine-chromium.git
+                URL https://code.qt.io/qt/qtwebengine-chromium.git
                 REF "${${PORT}_chromium_REF}"
             )
             if(NOT EXISTS "${SOURCE_PATH}/src/3rdparty/chromium")
@@ -144,10 +151,10 @@ function(qt_cmake_configure)
         list(APPEND _qarg_OPTIONS "-DQT_MKSPECS_DIR:PATH=${CURRENT_HOST_INSTALLED_DIR}/share/Qt6/mkspecs")
     endif()
 
-    set(MAKE_TARGET_MKSPEC "")
-    if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32")
-        set(MAKE_TARGET_MKSPEC "-DQT_QMAKE_TARGET_MKSPEC=linux-clang-libc++-32")
+    if(NOT DEFINED VCPKG_OSX_DEPLOYMENT_TARGET)
+        list(APPEND _qarg_OPTIONS "-DCMAKE_OSX_DEPLOYMENT_TARGET=14")
     endif()
+
     if (VCPKG_CMAKE_SYSTEM_PROCESSOR STREQUAL "wasm32") 
         vcpkg_cmake_configure(
             SOURCE_PATH "${SOURCE_PATH}"
@@ -158,18 +165,20 @@ function(qt_cmake_configure)
                 -DCMAKE_FIND_PACKAGE_TARGETS_GLOBAL=ON # Because Qt doesn't correctly scope find_package calls.
                 #-DQT_HOST_PATH=<somepath> # For crosscompiling
                 #-DQT_PLATFORM_DEFINITION_DIR=mkspecs/win32-msvc
-                ${MAKE_TARGET_MKSPEC}
+                -DQT_QMAKE_TARGET_MKSPEC=linux-clang-libc++-32
                 #-DQT_USE_CCACHE
-                -DQT_BUILD_EXAMPLES:BOOL=OFF
+                -DBUILD_SHARED_LIBS:BOOL=OFF
+                -DQT_BUILD_EXAMPLE:BOOL=OFF
                 -DQT_BUILD_TESTS:BOOL=OFF
                 -DQT_BUILD_BENCHMARKS:BOOL=OFF
+                -DUNIX:BOOL=ON
+                -DWASM:BOOL=ON
                 ${PERL_OPTION}
                 -DINSTALL_BINDIR:STRING=bin
                 -DINSTALL_LIBEXECDIR:STRING=bin
                 -DINSTALL_PLUGINSDIR:STRING=${qt_plugindir}
                 -DINSTALL_QMLDIR:STRING=${qt_qmldir}
                 ${_qarg_OPTIONS}
-                -DUNIX:BOOL=ON
                 -DQT_FEATURE_accessibility_atspi_bridge=OFF
                 -DQT_FEATURE_accessibility=OFF
                 -DQT_FEATURE_action=OFF
@@ -209,7 +218,7 @@ function(qt_cmake_configure)
                 -DQT_FEATURE_ctf=OFF
                 -DQT_FEATURE_cursor=ON
                 -DQT_FEATURE_cxx11_future=OFF
-                -DQT_FEATURE_cxx17_filesystem=ON
+                -DQT_FEATURE_cxx17_filesystem=OFF
                 -DQT_FEATURE_cxx20=OFF
                 -DQT_FEATURE_cxx2a=OFF
                 -DQT_FEATURE_cxx2b=OFF
@@ -361,7 +370,7 @@ function(qt_cmake_configure)
                 -DQT_FEATURE_rpath=OFF
                 -DQT_FEATURE_separate_debug_info=OFF
                 -DQT_FEATURE_sessionmanager=OFF
-                -DQT_FEATURE_settings=ON
+                -DQT_FEATURE_settings=OFF
                 -DQT_FEATURE_sha3_fast=ON
                 -DQT_FEATURE_shani=OFF
                 -DQT_FEATURE_shared=OFF
@@ -449,10 +458,7 @@ function(qt_cmake_configure)
                 -DQT_FEATURE_xmlstreamwriter=ON
                 -DQT_FEATURE_xrender=OFF
                 -DQT_FEATURE_zstd=OFF
-                -DQT_USE_BUNDLED_BundledFreetype=ON
-                -DQT_USE_BUNDLED_BundledLibpng=ON
                 -DQT_USE_BUNDLED_BundledPcre2=ON
-                -DQT_USE_BUNDLED_BundledZLIB=ON
             OPTIONS_RELEASE
                 ${_qarg_OPTIONS_RELEASE}
                 -DINSTALL_DOCDIR:STRING=doc/${QT6_DIRECTORY_PREFIX}
@@ -498,11 +504,13 @@ function(qt_cmake_configure)
             ${ninja_option}
             ${disable_parallel}
             OPTIONS
-                -DQT_USE_DEFAULT_CMAKE_OPTIMIZATION_FLAGS:BOOL=ON # We don't want Qt to screw with users toolchain settings.
-                -DCMAKE_FIND_PACKAGE_TARGETS_GLOBAL=ON # Because Qt doesn't correctly scope find_package calls.
+                -DQT_FORCE_WARN_APPLE_SDK_AND_XCODE_CHECK=ON
+                -DQT_NO_FORCE_SET_CMAKE_BUILD_TYPE:BOOL=ON
+                -DQT_USE_DEFAULT_CMAKE_OPTIMIZATION_FLAGS:BOOL=ON # We don't want Qt to mess with users toolchain settings.
+                -DCMAKE_FIND_PACKAGE_TARGETS_GLOBAL=ON # Because Qt doesn't correctly scope find_package calls. 
                 #-DQT_HOST_PATH=<somepath> # For crosscompiling
                 #-DQT_PLATFORM_DEFINITION_DIR=mkspecs/win32-msvc
-                ${MAKE_TARGET_MKSPEC}
+                #-DQT_QMAKE_TARGET_MKSPEC=win32-msvc
                 #-DQT_USE_CCACHE
                 -DQT_BUILD_EXAMPLES:BOOL=OFF
                 -DQT_BUILD_TESTS:BOOL=OFF
@@ -513,7 +521,6 @@ function(qt_cmake_configure)
                 -DINSTALL_PLUGINSDIR:STRING=${qt_plugindir}
                 -DINSTALL_QMLDIR:STRING=${qt_qmldir}
                 ${_qarg_OPTIONS}
-                -DQT_FEATURE_system_libb2:INTERNAL=OFF
             OPTIONS_RELEASE
                 ${_qarg_OPTIONS_RELEASE}
                 -DINSTALL_DOCDIR:STRING=doc/${QT6_DIRECTORY_PREFIX}
@@ -541,6 +548,7 @@ function(qt_cmake_configure)
                 HOST_PERL
                 QT_SYNCQT
                 QT_NO_FORCE_SET_CMAKE_BUILD_TYPE
+                QT_FORCE_WARN_APPLE_SDK_AND_XCODE_CHECK
                 ${_qarg_OPTIONS_MAYBE_UNUSED}
                 INPUT_bundled_xcb_xinput
                 INPUT_freetype
@@ -554,7 +562,14 @@ function(qt_cmake_configure)
                 INPUT_xkbcommon
         )
     endif()
-    set(Z_VCPKG_CMAKE_GENERATOR "${Z_VCPKG_CMAKE_GENERATOR}" PARENT_SCOPE)
+    foreach(suffix IN ITEMS dbg rel)
+        if(EXISTS "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-${suffix}/config.summary")
+            file(COPY_FILE
+                "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-${suffix}/config.summary"
+                "${CURRENT_BUILDTREES_DIR}/config.summary-${TARGET_TRIPLET}-${suffix}.log"
+            )
+        endif()
+    endforeach()
 endfunction()
 
 function(qt_fix_prl_files)
@@ -562,7 +577,7 @@ function(qt_fix_prl_files)
     file(TO_CMAKE_PATH "${package_dir}/lib" lib_path)
     file(TO_CMAKE_PATH "${package_dir}/include/Qt6" include_path)
     file(TO_CMAKE_PATH "${CURRENT_INSTALLED_DIR}" install_prefix)
-    file(GLOB_RECURSE prl_files "${CURRENT_PACKAGES_DIR}/*.prl")
+    file(GLOB_RECURSE prl_files "${CURRENT_PACKAGES_DIR}/*.prl" "${CURRENT_PACKAGES_DIR}/*.pri")
     foreach(prl_file IN LISTS prl_files)
         file(READ "${prl_file}" _contents)
         string(REPLACE "${lib_path}" "\$\$[QT_INSTALL_LIBS]" _contents "${_contents}")
@@ -608,8 +623,8 @@ function(qt_fixup_and_cleanup)
     file(GLOB_RECURSE DEBUG_CMAKE_TARGETS "${CURRENT_PACKAGES_DIR}/share/**/*Targets-debug.cmake")
     debug_message("DEBUG_CMAKE_TARGETS:${DEBUG_CMAKE_TARGETS}")
     foreach(_debug_target IN LISTS DEBUG_CMAKE_TARGETS)
-        vcpkg_replace_string("${_debug_target}" "{_IMPORT_PREFIX}/${qt_plugindir}" "{_IMPORT_PREFIX}/debug/${qt_plugindir}")
-        vcpkg_replace_string("${_debug_target}" "{_IMPORT_PREFIX}/${qt_qmldir}" "{_IMPORT_PREFIX}/debug/${qt_qmldir}")
+        vcpkg_replace_string("${_debug_target}" "{_IMPORT_PREFIX}/${qt_plugindir}" "{_IMPORT_PREFIX}/debug/${qt_plugindir}" IGNORE_UNCHANGED)
+        vcpkg_replace_string("${_debug_target}" "{_IMPORT_PREFIX}/${qt_qmldir}" "{_IMPORT_PREFIX}/debug/${qt_qmldir}" IGNORE_UNCHANGED)
     endforeach()
 
     file(GLOB_RECURSE STATIC_CMAKE_TARGETS "${CURRENT_PACKAGES_DIR}/share/Qt6Qml/QmlPlugins/*.cmake")
@@ -617,7 +632,8 @@ function(qt_fixup_and_cleanup)
         # restore a single get_filename_component which was remove by vcpkg_cmake_config_fixup
         vcpkg_replace_string("${_plugin_target}"
                              [[get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_FILE}" PATH)]]
-                             "get_filename_component(_IMPORT_PREFIX \"\${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)")
+                             "get_filename_component(_IMPORT_PREFIX \"\${CMAKE_CURRENT_LIST_FILE}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)"
+                             IGNORE_UNCHANGED)
     endforeach()
 
     set(qt_tooldest "${CURRENT_PACKAGES_DIR}/tools/Qt6/bin")
@@ -632,9 +648,6 @@ function(qt_fixup_and_cleanup)
     if(_qarg_TOOL_NAMES)
         set(tool_names ${_qarg_TOOL_NAMES})
         vcpkg_copy_tools(TOOL_NAMES ${tool_names} SEARCH_DIR "${qt_searchdir}" DESTINATION "${qt_tooldest}" AUTO_CLEAN)
-        if(EXISTS "${CURRENT_PACKAGES_DIR}/${qt_plugindir}" AND NOT PORT STREQUAL "qtdeclarative") #qmllint conflict
-            file(COPY "${CURRENT_PACKAGES_DIR}/${qt_plugindir}/" DESTINATION "${qt_tooldest}")
-        endif()
     endif()
 
     if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
@@ -674,6 +687,7 @@ function(qt_fixup_and_cleanup)
         endif()
     endif()
 
+    vcpkg_fixup_pkgconfig()
 endfunction()
 
 function(qt_install_submodule)
@@ -685,6 +699,14 @@ function(qt_install_submodule)
     set(qt_qmldir ${QT6_DIRECTORY_PREFIX}qml)
 
     qt_download_submodule(PATCHES ${_qis_PATCHES})
+
+    if(VCPKG_TARGET_IS_ANDROID)
+        # Qt only supports dynamic linkage on Android,
+        # https://bugreports.qt.io/browse/QTBUG-32618.
+        # It requires libc++_shared, cf. <qtbase>/cmake/QtPlatformAndroid.cmake
+        # and https://developer.android.com/ndk/guides/cpp-support#sr
+        vcpkg_check_linkage(ONLY_DYNAMIC_LIBRARY)
+    endif()
 
     if(_qis_DISABLE_NINJA)
         set(_opt DISABLE_NINJA)
