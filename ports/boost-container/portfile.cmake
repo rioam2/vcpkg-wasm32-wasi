@@ -7,7 +7,7 @@ vcpkg_from_github(
     SHA512 56c00a2531c36cdffd3f8508d246bf0004c22eebb8381ce51054a6fbcc3ca6cd4bacea7b012135cb08af118341e1859b889b5dd51d3973b098246b404b2aa852
     HEAD_REF master
     PATCHES
-        posix-threads.diff
+        wasi-support.diff
 )
 
 set(FEATURE_OPTIONS "")
